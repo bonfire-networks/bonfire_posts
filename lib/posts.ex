@@ -285,7 +285,7 @@ defmodule Bonfire.Posts do
              not is_nil(e(tag, :character, nil))
            end)
            |> filter_empty([])
-           |> Bonfire.Common.Pointers.list!(skip_boundary_check: true)
+           |> Bonfire.Common.Needle.list!(skip_boundary_check: true)
            #  |> repo().maybe_preload(:named)
            |> debug("include_as_hashtags"),
          mentions <-
