@@ -219,6 +219,19 @@ defmodule Bonfire.Posts do
     end
   end
 
+  def search(search, opts \\ []) do
+    Utils.maybe_apply(
+      Bonfire.Search,
+      :search_by_type,
+      [search, Post, opts],
+      &none/2
+    ) || search_db(search, opts)
+  end
+
+  defp none(_, _), do: nil
+
+  def search_db(search, opts \\ []), do: Bonfire.Social.PostContents.search_db(search, opts)
+
   # TODO: federated delete, in addition to create:
   def ap_publish_activity(subject, verb, post) do
     # TODO: get from config
