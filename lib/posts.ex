@@ -284,6 +284,9 @@ defmodule Bonfire.Posts do
         []
       end
 
+    thread_id = e(post, :replied, :thread_id, nil)
+    reply_to_id = e(post, :replied, :reply_to_id, nil)
+
     with {:ok, actor} <-
            ActivityPub.Actor.get_cached(pointer: subject),
 
@@ -333,7 +336,7 @@ defmodule Bonfire.Posts do
          # end),
          # FIXME: the below seems to return ALL known users for public posts?
          bcc <- [],
-         context <- Threads.ap_prepare(e(post, :replied, :thread_id, nil)),
+         context <- if(thread_id and thread_id != id, do: Threads.ap_prepare(thread_id)),
          #  to <- to ++ Enum.map(mentions, fn actor -> actor.ap_id end),
          object <-
            %{
@@ -352,7 +355,9 @@ defmodule Bonfire.Posts do
              "content" => Text.maybe_markdown_to_html(e(post, :post_content, :html_body, nil)),
              "attachment" => Bonfire.Files.ap_publish_activity(e(post, :media, nil)),
              # TODO support replies and context for all object types, not just posts
-             "inReplyTo" => Threads.ap_prepare(e(post, :replied, :reply_to_id, nil)),
+             "inReplyTo" =>
+               if(reply_to_id == thread_id, do: context) ||
+                 if(reply_to_id != id, do: Threads.ap_prepare(reply_to_id)),
              "context" => context,
              "tag" =>
                Enum.map(mentions, fn actor ->
