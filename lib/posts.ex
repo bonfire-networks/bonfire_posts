@@ -225,12 +225,13 @@ defmodule Bonfire.Posts do
       :search_by_type,
       [search, Post, opts],
       &none/2
-    ) || search_db(search, opts)
+    ) ||
+      search_query(search, opts) |> Integration.many(opts[:paginate?], opts)
   end
 
   defp none(_, _), do: nil
 
-  def search_db(search, opts \\ []), do: Bonfire.Social.PostContents.search_db(search, opts)
+  def search_query(search, opts \\ []), do: Bonfire.Social.PostContents.search_query(search, opts)
 
   # TODO: federated delete, in addition to create:
   def ap_publish_activity(subject, verb, post) do
