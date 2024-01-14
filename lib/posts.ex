@@ -336,7 +336,7 @@ defmodule Bonfire.Posts do
          # end),
          # FIXME: the below seems to return ALL known users for public posts?
          bcc <- [],
-         context <- if(thread_id and thread_id != id, do: Threads.ap_prepare(thread_id)),
+         context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
          #  to <- to ++ Enum.map(mentions, fn actor -> actor.ap_id end),
          object <-
            %{
