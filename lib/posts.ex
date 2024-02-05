@@ -335,7 +335,6 @@ defmodule Bonfire.Posts do
            |> Enum.map(& &1.ap_id)
            |> debug("direct_recipients"),
          # end),
-         # FIXME: the below seems to return ALL known users for public posts?
          bcc <- [],
          context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
          #  to <- to ++ Enum.map(mentions, fn actor -> actor.ap_id end),
@@ -384,19 +383,45 @@ defmodule Bonfire.Posts do
              local: true,
              actor: actor,
              context: context,
-             object: object,
              to: to,
+             published:
+               DatesTimes.date_from_pointer(id)
+               |> DateTime.to_iso8601(),
              additional: %{
                "cc" => cc,
                "bcc" => bcc
              }
-           }
-           |> debug("params for ActivityPub / #{inspect(verb)}"),
-         {:ok, activity} <-
-           if(verb == :edit, do: ActivityPub.update(params), else: ActivityPub.create(params)) do
+           },
+         {:ok, activity} <- ap_create_or_update(verb, params, object) do
       {:ok, activity}
     end
     |> debug("donzz")
+  end
+
+  defp ap_create_or_update(:edit, params, object) do
+    ActivityPub.update(
+      params
+      |> Map.merge(%{
+        object:
+          Map.put_new(
+            object,
+            "updated",
+            DateTime.utc_now()
+            |> DateTime.to_iso8601()
+          )
+      })
+      |> debug("params for ActivityPub / edit - Update")
+    )
+  end
+
+  defp ap_create_or_update(other_verb, params, object) do
+    ActivityPub.create(
+      params
+      |> Map.merge(%{
+        object: object
+      })
+      |> debug("params for ActivityPub / #{inspect(other_verb)}")
+    )
   end
 
   @doc """
