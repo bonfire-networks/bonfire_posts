@@ -23,7 +23,7 @@ defmodule Bonfire.Posts.Migrations do
     end
   end
 
-  defmacro migrate_social() do
+  defmacro migrate_posts() do
     quote do
       if Ecto.Migration.direction() == :up,
         do: unquote(ms(:up)),
@@ -31,5 +31,5 @@ defmodule Bonfire.Posts.Migrations do
     end
   end
 
-  defmacro migrate_social(dir), do: ms(dir)
+  defmacro migrate_posts(dir), do: ms(dir)
 end
