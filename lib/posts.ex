@@ -461,7 +461,7 @@ defmodule Bonfire.Posts do
          List.wrap(post_data["audience"]))
       |> filter_empty([])
       |> List.delete(Bonfire.Federate.ActivityPub.AdapterUtils.public_uri())
-      |> info("incoming recipients")
+      |> debug("incoming recipients")
       |> Enum.map(fn ap_id ->
         with {:ok, user} <- Bonfire.Me.Users.by_ap_id(ap_id) do
           {ap_id, user |> repo().maybe_preload(:settings)}
@@ -471,7 +471,7 @@ defmodule Bonfire.Posts do
         end
       end)
       |> filter_empty([])
-      |> info("incoming users")
+      |> debug("incoming users")
 
     # |> ulid()
 
@@ -481,8 +481,10 @@ defmodule Bonfire.Posts do
     reply_to_id =
       if reply_to,
         do:
-          reply_to
-          |> info()
+          (e(reply_to, "items", nil) || e(reply_to, "id", nil) || reply_to)
+          |> List.wrap()
+          |> List.first()
+          |> debug()
           |> ActivityPub.Object.get_cached!(ap_id: ...)
           |> e(:pointer_id, nil)
 
