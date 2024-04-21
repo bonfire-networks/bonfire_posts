@@ -141,20 +141,15 @@ defmodule Bonfire.Posts do
 
   def read(post_id, opts_or_socket_or_current_user \\ [])
       when is_binary(post_id) do
-    with {:ok, post} <-
-           query([id: post_id], opts_or_socket_or_current_user)
-           |> Activities.read_query(opts_or_socket_or_current_user)
-           |> Objects.as_permitted_for(opts_or_socket_or_current_user)
-           |> repo().single() do
-      {:ok, Activities.activity_under_object(post)}
-    end
+    query([id: post_id], opts_or_socket_or_current_user)
+    |> Objects.read(opts_or_socket_or_current_user)
   end
 
   @doc "List posts created by the user and which are in their outbox, which are not replies"
   def list_by(by_user, opts \\ []) do
     # query FeedPublish
     # [posts_by: {by_user, &filter/3}]
-    filter(:posts_by, by_user, Post)
+    Objects.filter(:by, by_user, query_base())
     |> list_paginated(to_options(opts) ++ [subject_user: by_user])
   end
 
@@ -166,11 +161,13 @@ defmodule Bonfire.Posts do
     filters
     # |> debug("filters")
     |> query_paginated(opts)
-    |> FeedActivities.feed_many_paginated(opts)
+    |> Objects.list_paginated(opts)
   end
 
   @doc "Query posts with pagination"
   def query_paginated(filters, opts \\ [])
+
+  def query_paginated([], opts), do: query_paginated(query_base(), opts)
 
   def query_paginated(filters, opts)
       when is_list(filters) or is_struct(filters) do
@@ -188,35 +185,14 @@ defmodule Bonfire.Posts do
   def query(filters \\ [], opts \\ nil)
 
   def query(filters, opts) when is_list(filters) or is_tuple(filters) do
-    base_query(filters, opts)
+    query_base()
+    |> query_filter(filters, nil, nil)
     |> boundarise(main_object.id, opts)
   end
 
-  defp base_query(filters, _opts) when is_list(filters) or is_tuple(filters) do
+  defp query_base do
     from(main_object in Post, as: :main_object)
     |> proload([:post_content])
-    |> query_filter(filters, nil, nil)
-  end
-
-  # doc "List posts created by the user and which are in their outbox, which are not replies"
-  def filter(:posts_by, user, query) do
-    case ulid(user) do
-      nil ->
-        query
-
-      id ->
-        # user = repo().maybe_preload(user, [:character])
-        verb_id = Verbs.get_id!(:create)
-
-        query
-        |> proload(activity: [:object, :replied])
-        |> where(
-          [activity: activity, replied: replied],
-          is_nil(replied.reply_to_id) and
-            activity.verb_id == ^verb_id and
-            activity.subject_id == ^id
-        )
-    end
   end
 
   def search(search, opts \\ []) do
