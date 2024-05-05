@@ -33,7 +33,7 @@ defmodule Bonfire.Posts.ConnCase do
       import Bonfire.Posts.Fake
 
       use Bonfire.Common.Utils
-      import Bonfire.Social.Integration
+      import Bonfire.Social
 
       # The default endpoint for testing
       @endpoint Application.compile_env!(:bonfire, :endpoint_module)
@@ -41,7 +41,7 @@ defmodule Bonfire.Posts.ConnCase do
   end
 
   setup tags do
-    # import Bonfire.Social.Integration
+    # import Bonfire.Social
 
     Bonfire.Common.Test.Interactive.setup_test_repo(tags)
 

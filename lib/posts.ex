@@ -1,4 +1,6 @@
 defmodule Bonfire.Posts do
+  @moduledoc "./README.md" |> File.stream!() |> Enum.drop(1) |> Enum.join()
+
   use Arrows
   import Untangle
   import Bonfire.Boundaries.Queries
@@ -16,7 +18,7 @@ defmodule Bonfire.Posts do
   alias Bonfire.Social.FeedActivities
   # alias Bonfire.Social.Feeds
   alias Bonfire.Social.Objects
-  alias Bonfire.Social.Integration
+  alias Bonfire.Social
   alias Bonfire.Social.PostContents
   alias Bonfire.Social.Tags
   alias Bonfire.Social.Threads
@@ -202,7 +204,7 @@ defmodule Bonfire.Posts do
       [search, Post, opts],
       &none/2
     ) ||
-      search_query(search, opts) |> Integration.many(opts[:paginate?], opts)
+      search_query(search, opts) |> Social.many(opts[:paginate?], opts)
   end
 
   defp none(_, _), do: nil
@@ -467,7 +469,7 @@ defmodule Bonfire.Posts do
     to_circles =
       circles ++
         Enum.map(direct_recipients || [], fn {_, character} ->
-          if Bonfire.Social.Integration.federating?(character), do: id(character)
+          if Bonfire.Social.federating?(character), do: id(character)
         end)
 
     attrs =
