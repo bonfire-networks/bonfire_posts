@@ -49,18 +49,69 @@ defmodule Bonfire.Posts do
       # {"Update", "Article"}
     ]
 
+  @doc """
+  TODO: Creates a draft post. Not implemented yet.
+
+  ## Parameters
+
+  - `creator`: The creator of the draft post.
+  - `attrs`: Attributes for the draft post.
+  """
   def draft(_creator, _attrs) do
     # TODO: create as private
     # with {:ok, post} <- create(creator, attrs) do
     #   {:ok, post}
     # end
+    {:error, :not_implemented}
   end
 
-  def publish(opts \\ []) do
+  @doc """
+  Publishes a post.
+
+  ## Parameters
+
+  - `opts`: Options for publishing the post.
+
+  ## Returns
+
+  `{:ok, post}` on success, `{:error, reason}` on failure.
+
+  ## Examples
+
+      iex> Bonfire.Posts.publish(
+        current_user: me, 
+        boundary: "public",
+        post_attrs: %{
+          post_content: %{
+            name: "test post title",
+            html_body: "<p>epic html message</p>"
+          }
+        })
+      {:ok, %Post{}}
+  """
+  def publish(opts) do
     run_epic(:publish, to_options(opts))
   end
 
-  @doc "You should call `Objects.delete/2` instead"
+  @doc """
+  Deletes a post.
+
+  Note: You should use `Bonfire.Social.Objects.delete/2` instead.
+
+  ## Parameters
+
+  - `object`: The post object to delete.
+  - `opts`: Options for deleting the post.
+
+  ## Returns
+
+  `{:ok, deleted_post}` on success, `{:error, reason}` on failure.
+
+  ## Examples
+
+      iex> Bonfire.Posts.delete(post)
+      {:ok, %Post{}}
+  """
   def delete(object, opts \\ []) do
     opts =
       to_options(opts)
@@ -80,6 +131,24 @@ defmodule Bonfire.Posts do
     |> run_epic(:delete, ..., :object)
   end
 
+  @doc """
+  Runs a series of post `Bonfire.Epics` operations based on configured acts for this module.
+
+  ## Parameters
+
+  - `type`: The type of epic operation to run.
+  - `options`: Options for the epic operation.
+  - `on`: The key in the epic assigns to return (default: `:post`).
+
+  ## Returns
+
+  `{:ok, result}` on success, `{:error, reason}` on failure.
+
+  ## Examples
+
+      iex> Bonfire.Posts.run_epic(:publish, [])
+      {:ok, %Post{}}
+  """
   def run_epic(type, options \\ [], on \\ :post) do
     env = Config.env()
 
@@ -112,6 +181,22 @@ defmodule Bonfire.Posts do
   #   end
   # end
 
+  @doc """
+  Creates a changeset for a post.
+
+  ## Parameters
+
+  - `action`: The action to perform (`:create`).
+  - `attrs`: Attributes for the post.
+
+  ## Returns
+
+  A `%Changeset{}` for the post.
+
+  ## Examples
+
+      iex> Bonfire.Posts.changeset(:create, %{title: "New Post"})
+  """
   def changeset(action, attrs, creator \\ nil, preset \\ nil)
 
   def changeset(:create, attrs, _creator, _preset) when attrs == %{} do
@@ -141,13 +226,46 @@ defmodule Bonfire.Posts do
     })
   end
 
-  def read(post_id, opts_or_socket_or_current_user \\ [])
+  @doc """
+  Attempts to fetch a post by its ID, if the current user has permission to read it.
+
+  ## Parameters
+
+  - `post_id`: The ID of the post to read.
+  - `opts`: Options, incl. current user.
+
+  ## Returns
+
+  The post if found, `nil` otherwise.
+
+  ## Examples
+
+      iex> Bonfire.Posts.read("post_123")
+      %Post{}
+  """
+  def read(post_id, opts \\ [])
       when is_binary(post_id) do
-    query([id: post_id], opts_or_socket_or_current_user)
-    |> Objects.read(opts_or_socket_or_current_user)
+    query([id: post_id], opts)
+    |> Objects.read(opts)
   end
 
-  @doc "List posts created by the user and which are in their outbox, which are not replies"
+  @doc """
+  Lists posts created by a user that are in their outbox and are not replies.
+
+  ## Parameters
+
+  - `by_user`: The user whose posts to list.
+  - `opts`: Options for listing posts.
+
+  ## Returns
+
+  A list of posts.
+
+  ## Examples
+
+      iex> Bonfire.Posts.list_by(user)
+      [%Post{}, %Post{}]
+  """
   def list_by(by_user, opts \\ []) do
     # query FeedPublish
     # [posts_by: {by_user, &filter/3}]
@@ -155,7 +273,23 @@ defmodule Bonfire.Posts do
     |> list_paginated(to_options(opts) ++ [subject_user: by_user])
   end
 
-  @doc "List posts with pagination"
+  @doc """
+  Lists posts with pagination.
+
+  ## Parameters
+
+  - `filters`: Filters to apply to the query.
+  - `opts`: Options for pagination.
+
+  ## Returns
+
+  A paginated list of posts.
+
+  ## Examples
+
+      iex> Bonfire.Posts.list_paginated([])
+      %{edges: [%Post{}, %Post{}], page_info: %{}}
+  """
   def list_paginated(filters, opts \\ [])
 
   def list_paginated(filters, opts)
@@ -166,7 +300,23 @@ defmodule Bonfire.Posts do
     |> Objects.list_paginated(opts)
   end
 
-  @doc "Query posts with pagination"
+  @doc """
+  Queries posts with pagination.
+
+  ## Parameters
+
+  - `filters`: Filters to apply to the query.
+  - `opts`: Options for pagination.
+
+  ## Returns
+
+  A paginated query for posts.
+
+  ## Examples
+
+      iex> Bonfire.Posts.query_paginated([])
+      #Ecto.Query<>
+  """
   def query_paginated(filters, opts \\ [])
 
   def query_paginated([], opts), do: query_paginated(query_base(), opts)
@@ -184,6 +334,23 @@ defmodule Bonfire.Posts do
   # query_paginated(filters \\ [], current_user_or_socket_or_opts \\ [],  query \\ FeedPublish)
   def query_paginated({a, b}, opts), do: query_paginated([{a, b}], opts)
 
+  @doc """
+  Queries posts.
+
+  ## Parameters
+
+  - `filters`: Filters to apply to the query.
+  - `opts`: Query options.
+
+  ## Returns
+
+  An Ecto query for posts.
+
+  ## Examples
+
+      iex> Bonfire.Posts.query([id: "post_123"])
+      #Ecto.Query<>
+  """
   def query(filters \\ [], opts \\ nil)
 
   def query(filters, opts) when is_list(filters) or is_tuple(filters) do
@@ -197,6 +364,23 @@ defmodule Bonfire.Posts do
     |> proload([:post_content])
   end
 
+  @doc """
+  Searches for posts.
+
+  ## Parameters
+
+  - `search`: The search term to look for in the title, summary, or body.
+  - `opts`: Search options.
+
+  ## Returns
+
+  A list of matching posts.
+
+  ## Examples
+
+      iex> Bonfire.Posts.search("example")
+      [%Post{}, %Post{}]
+  """
   def search(search, opts \\ []) do
     Utils.maybe_apply(
       Bonfire.Search,
@@ -211,6 +395,24 @@ defmodule Bonfire.Posts do
 
   def search_query(search, opts \\ []), do: Bonfire.Social.PostContents.search_query(search, opts)
 
+  @doc """
+  Publishes an ActivityPub activity for a post.
+
+  ## Parameters
+
+  - `subject`: The subject of the activity.
+  - `verb`: The verb of the activity.
+  - `post`: The post to publish.
+
+  ## Returns
+
+  `{:ok, activity}` on success, `{:error, reason}` on failure.
+
+  ## Examples
+
+      iex> Bonfire.Posts.ap_publish_activity(user, :create, post)
+      {:ok, %ActivityPub.Activity{}}
+  """
   # TODO: federated delete, in addition to create:
   def ap_publish_activity(subject, verb, post) do
     # TODO: get from config
@@ -403,7 +605,23 @@ defmodule Bonfire.Posts do
   end
 
   @doc """
-  record an incoming ActivityPub post
+  Receives an incoming ActivityPub post.
+
+  ## Parameters
+
+  - `creator`: The creator of the post.
+  - `activity`: The ActivityPub activity.
+  - `object`: The ActivityPub object.
+  - `circles`: The circles to publish to (default: `[]`).
+
+  ## Returns
+
+  `{:ok, post}` on success, `{:error, reason}` on failure.
+
+  ## Examples
+
+      iex> Bonfire.Posts.ap_receive_activity(creator, activity, object)
+      {:ok, %Post{}}
   """
   def ap_receive_activity(creator, activity, object, circles \\ [])
 
@@ -514,6 +732,23 @@ defmodule Bonfire.Posts do
     end
   end
 
+  @doc """
+  Formats a post for search indexing.
+
+  ## Parameters
+
+  - `post`: The post to format.
+  - `opts`: Formatting options.
+
+  ## Returns
+
+  A map with formatted post data for indexing.
+
+  ## Examples
+
+      iex> Bonfire.Posts.indexing_object_format(post)
+      %{id: "post_123", index_type: "Bonfire.Data.Social.Post", post_content: %{}, created: %{}, tags: []}
+  """
   # TODO: rewrite to take a post instead of an activity?
   def indexing_object_format(post, _opts \\ []) do
     # current_user = current_user(opts)
