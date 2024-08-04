@@ -150,24 +150,7 @@ defmodule Bonfire.Posts do
       {:ok, %Post{}}
   """
   def run_epic(type, options \\ [], on \\ :post) do
-    env = Config.env()
-
-    options =
-      Keyword.merge(options, crash: env == :test, debug: env != :prod, verbose: env == :test)
-
-    with %{errors: []} = epic <-
-           Epic.from_config!(__MODULE__, type)
-           |> Epic.assign(:options, options)
-           |> Epic.run() do
-      {:ok, epic.assigns[on]}
-    else
-      e ->
-        if options[:return_epic_on_error] do
-          e
-        else
-          {:error, Errors.error_msg(e)}
-        end
-    end
+    Bonfire.Epics.run_epic(__MODULE__, type, Keyword.put(options, :on, on))
   end
 
   # def reply(creator, attrs) do
