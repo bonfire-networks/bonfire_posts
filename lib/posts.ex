@@ -738,12 +738,12 @@ defmodule Bonfire.Posts do
 
     case post do
       %{
-        # The indexer is written in terms of the inserted object, so changesets need fake inserting
         id: id,
         post_content: content,
         activity: %{
           subject: %{profile: profile, character: character} = activity
         }
+        # The indexer is written in terms of the inserted object, so changesets need fake inserting
       } ->
         indexable(id, content, activity, profile, character)
 
