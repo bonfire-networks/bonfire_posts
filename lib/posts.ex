@@ -119,7 +119,15 @@ defmodule Bonfire.Posts do
 
     # TODO: should we only delete the PostContent and the activity? so as to preserve thread and nesting integrity
 
+    object = repo().maybe_preload(object, [:media])
+    delete_media = e(object, :media, [])
+
     opts
+    |> Keyword.update(
+      :delete_media,
+      delete_media,
+      &Enum.uniq(List.wrap(&1) ++ delete_media)
+    )
     |> Keyword.put(
       :delete_associations,
       # adds per-type assocs
