@@ -3,6 +3,7 @@ defmodule Bonfire.Posts do
 
   use Arrows
   import Untangle
+  use Bonfire.Common.E
   import Bonfire.Boundaries.Queries
   alias Bonfire.Data.Social.Post
   # alias Bonfire.Data.Social.PostContent
@@ -427,9 +428,9 @@ defmodule Bonfire.Posts do
 
     subject =
       subject ||
-        Utils.e(post, :created, :creator, nil) ||
-        Utils.e(post, :created, :creator_id, nil) || Utils.e(post, :activity, :subject, nil) ||
-        Utils.e(post, :activity, :subject_id, nil)
+        e(post, :created, :creator, nil) ||
+        e(post, :created, :creator_id, nil) || e(post, :activity, :subject, nil) ||
+        e(post, :activity, :subject_id, nil)
 
     thread_creator =
       e(post, :replied, :thread, :created, :creator, nil) ||
