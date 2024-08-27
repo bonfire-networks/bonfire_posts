@@ -237,6 +237,8 @@ defmodule Bonfire.Posts do
   """
   def read(post_id, opts \\ [])
       when is_binary(post_id) do
+    opts = Keyword.merge(to_options(opts), verbs: [:read])
+
     query([id: post_id], opts)
     |> Objects.read(opts)
   end
