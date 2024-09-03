@@ -412,7 +412,7 @@ defmodule Bonfire.Posts do
     # TODO: get from config
     public_acl_ids = Bonfire.Boundaries.Acls.remote_public_acl_ids()
 
-    id = ulid!(post)
+    id = uid!(post)
 
     post =
       post
@@ -663,7 +663,7 @@ defmodule Bonfire.Posts do
       |> filter_empty([])
       |> debug("incoming users")
 
-    # |> ulid()
+    # |> uid()
 
     reply_to = post_data["inReplyTo"] || activity_data["inReplyTo"]
 
