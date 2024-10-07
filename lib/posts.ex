@@ -617,29 +617,31 @@ defmodule Bonfire.Posts do
       iex> Bonfire.Posts.ap_receive_activity(creator, activity, object)
       {:ok, %Post{}}
   """
-  def ap_receive_activity(creator, activity, object, circles \\ [])
-
-  def ap_receive_activity(creator, activity, %{public: true} = object, []) do
-    ap_receive_activity(creator, activity, object, [:guest])
-  end
-
-  def ap_receive_activity(creator, %{data: activity_data}, object, circles) do
-    ap_receive_activity(creator, activity_data, object, circles)
-  end
-
-  # create an incoming post
   def ap_receive_activity(
         creator,
-        activity_data,
-        %{data: post_data, pointer_id: id, public: is_public} = _object,
-        circles
+        ap_activity,
+        ap_object
       )
       when not is_nil(creator) do
     # debug(activity: activity)
     # debug(creator: creator)
     # debug(object: object)
 
-    activity_data = activity_data || %{}
+    activity_data = e(ap_activity, :data, %{})
+    post_data = e(ap_object, :data, %{})
+    id = e(ap_object, :pointer_id, nil)
+
+    # TODO: put somewhere reusable so other types also use this
+    is_public =
+      case {e(ap_object, :public, nil), e(ap_activity, :public, nil)} do
+        {true, true} -> true
+        {nil, true} -> true
+        {true, nil} -> true
+        _ -> false
+      end
+      |> debug("is_public?")
+
+    circles = if is_public, do: [:guest], else: []
 
     #  TODO: put somewhere reusable by other types
     direct_recipients =
@@ -699,9 +701,7 @@ defmodule Bonfire.Posts do
         reply_to_id: reply_to_id
       })
 
-    info(is_public, "is_public")
-
-    if is_public == false and
+    if !is_public and
          (is_list(attrs[:mentions]) or is_map(attrs[:mentions])) and
          attrs[:mentions] != [] and attrs[:mentions] != %{} do
       info("treat as Message if private with @ mentions")
