@@ -7,7 +7,7 @@ defmodule Bonfire.Posts do
   import Bonfire.Boundaries.Queries
   alias Bonfire.Data.Social.Post
   # alias Bonfire.Data.Social.PostContent
-  # alias Bonfire.Data.Social.Replied
+  alias Bonfire.Data.Social.Replied
   # alias Bonfire.Data.Social.Activity
 
   # alias Bonfire.Boundaries.Circles
@@ -747,17 +747,8 @@ defmodule Bonfire.Posts do
   def indexing_object_format(post, _opts \\ []) do
     # current_user = current_user(opts)
 
-    case post do
-      %{
-        id: id,
-        post_content: content,
-        activity: %{
-          subject: %{profile: profile, character: character} = activity
-        }
-        # The indexer is written in terms of the inserted object, so changesets need fake inserting
-      } ->
-        indexable(id, content, activity, profile, character)
-
+    case post
+         |> repo().maybe_preload(:replied) do
       %{
         id: id,
         post_content: content,
@@ -775,9 +766,33 @@ defmodule Bonfire.Posts do
       %{
         id: id,
         post_content: content,
+        activity: %{creator_id: creator_id} = activity
+      } ->
+        creator = Bonfire.Me.Users.by_id(creator_id)
+
+        indexable(
+          id,
+          content,
+          activity,
+          e(creator, :profile, nil),
+          e(creator, :character, nil)
+        )
+
+      %{
+        id: id,
+        post_content: content,
+        activity: %{
+          subject: %{profile: profile, character: character} = activity
+        }
+        # The indexer is written in terms of the inserted object, so changesets need fake inserting
+      } ->
+        indexable(id, content, activity, profile, character)
+
+      %{
+        id: id,
+        post_content: content,
         activity: %{subject_id: subject_id} = activity
       } ->
-        # FIXME: we should get the creator/subject from the data
         creator = Bonfire.Me.Users.by_id(subject_id)
 
         indexable(
@@ -797,13 +812,30 @@ defmodule Bonfire.Posts do
 
   defp indexable(id, content, activity, profile, character) do
     # "url" => path(post),
+    debug(content)
+    debug(activity)
+
     %{
       "id" => id,
-      "index_type" => "Bonfire.Data.Social.Post",
+      "index_type" => Types.module_to_str(Bonfire.Data.Social.Post),
       "post_content" => Bonfire.Social.PostContents.indexing_object_format(content),
-      "created" => Bonfire.Me.Integration.indexing_format_created(profile, character),
-      "tags" => Tags.indexing_format_tags(activity)
+      # TODO: put the the following fields somewhere reusable across object types, maybe attach as Activity?
+      "replied" => %{
+        # TODO: can we assume the type and ID for mixins? to avoid storing extra data in the index
+        "id" => id,
+        "index_type" => Types.module_to_str(Replied),
+        "thread_id" =>
+          e(content, :replied, :thread_id, nil) || e(activity, :replied, :thread_id, nil),
+        "reply_to_id" =>
+          e(content, :replied, :reply_to_id, nil) || e(activity, :replied, :reply_to_id, nil)
+      },
+      "created" =>
+        maybe_apply(Bonfire.Me.Integration, :indexing_format_created, [profile, character],
+          fallback_return: nil
+        ),
+      "tags" => maybe_apply(Tags, :indexing_format_tags, activity || content, fallback_return: [])
     }
+    |> debug()
   end
 
   def count_total(), do: repo().one(select(Post, [u], count(u.id)))
