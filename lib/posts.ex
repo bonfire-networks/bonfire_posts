@@ -822,8 +822,8 @@ defmodule Bonfire.Posts do
       # TODO: put the the following fields somewhere reusable across object types, maybe attach as Activity?
       "replied" => %{
         # TODO: can we assume the type and ID for mixins? to avoid storing extra data in the index
-        "id" => id,
-        "index_type" => Types.module_to_str(Replied),
+        # "id" => id, # no need as can be inferred later by `Enums.maybe_to_structs/1`
+        # "index_type" => Types.module_to_str(Replied),
         "thread_id" =>
           e(content, :replied, :thread_id, nil) || e(activity, :replied, :thread_id, nil),
         "reply_to_id" =>
