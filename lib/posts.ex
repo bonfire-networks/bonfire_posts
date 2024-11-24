@@ -743,80 +743,16 @@ defmodule Bonfire.Posts do
       iex> Bonfire.Posts.indexing_object_format(post)
       %{id: "post_123", index_type: "Bonfire.Data.Social.Post", post_content: %{}, created: %{}, tags: []}
   """
-  # TODO: rewrite to take a post instead of an activity?
-  def indexing_object_format(post, _opts \\ []) do
-    # current_user = current_user(opts)
+  def indexing_object_format(object) do
+    content = e(object, :post_content, nil) |> debug()
+    activity = e(object, :activity, nil) |> debug()
 
-    case post
-         |> repo().maybe_preload(:replied) do
-      %{
-        id: id,
-        post_content: content,
-        created: %{creator: %{id: _} = creator},
-        activity: activity
-      } ->
-        indexable(
-          id,
-          content,
-          activity,
-          e(creator, :profile, nil),
-          e(creator, :character, nil)
-        )
-
-      %{
-        id: id,
-        post_content: content,
-        activity: %{creator_id: creator_id} = activity
-      } ->
-        creator = Bonfire.Me.Users.by_id(creator_id)
-
-        indexable(
-          id,
-          content,
-          activity,
-          e(creator, :profile, nil),
-          e(creator, :character, nil)
-        )
-
-      %{
-        id: id,
-        post_content: content,
-        activity: %{
-          subject: %{profile: profile, character: character} = activity
-        }
-        # The indexer is written in terms of the inserted object, so changesets need fake inserting
-      } ->
-        indexable(id, content, activity, profile, character)
-
-      %{
-        id: id,
-        post_content: content,
-        activity: %{subject_id: subject_id} = activity
-      } ->
-        creator = Bonfire.Me.Users.by_id(subject_id)
-
-        indexable(
-          id,
-          content,
-          activity,
-          e(creator, :profile, nil),
-          e(creator, :character, nil)
-        )
-
-      _ ->
-        error("Posts: no clause match for function indexing_object_format/3")
-        debug(post)
-        nil
-    end
-  end
-
-  defp indexable(id, content, activity, profile, character) do
-    # "url" => path(post),
-    debug(content)
-    debug(activity)
+    replied =
+      e(object, :replied, nil) || e(activity, :replied, nil) ||
+        repo().maybe_preload(object, :replied) |> e(:replied, nil)
 
     %{
-      "id" => id,
+      "id" => id(object),
       "index_type" => Types.module_to_str(Bonfire.Data.Social.Post),
       "post_content" => Bonfire.Social.PostContents.indexing_object_format(content),
       # TODO: put the the following fields somewhere reusable across object types, maybe attach as Activity?
@@ -830,12 +766,14 @@ defmodule Bonfire.Posts do
           e(content, :replied, :reply_to_id, nil) || e(activity, :replied, :reply_to_id, nil)
       },
       "created" =>
-        maybe_apply(Bonfire.Me.Integration, :indexing_format_created, [profile, character],
+        maybe_apply(Bonfire.Me.Integration, :indexing_format_created, [object],
           fallback_return: nil
         ),
       "tags" => maybe_apply(Tags, :indexing_format_tags, activity || content, fallback_return: [])
     }
     |> debug()
+
+    # "url" => path(post),
   end
 
   def count_total(), do: repo().one(select(Post, [u], count(u.id)))
