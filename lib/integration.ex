@@ -3,7 +3,7 @@ defmodule Bonfire.Posts.Integration do
   alias Bonfire.Common.Config
   use Bonfire.Common.Utils
   # alias Bonfire.Data.Social.Follow
-  import Untangle
+  # import Untangle
 
   declare_extension("Posts",
     icon: "icomoon-free:blog",

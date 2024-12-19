@@ -7,20 +7,18 @@ defmodule Bonfire.Posts do
   import Bonfire.Boundaries.Queries
   alias Bonfire.Data.Social.Post
   # alias Bonfire.Data.Social.PostContent
-  alias Bonfire.Data.Social.Replied
+  # alias Bonfire.Data.Social.Replied
   # alias Bonfire.Data.Social.Activity
 
   # alias Bonfire.Boundaries.Circles
-  alias Bonfire.Boundaries.Verbs
-
-  alias Bonfire.Epics.Epic
+  # alias Bonfire.Boundaries.Verbs
 
   alias Bonfire.Social.Activities
-  alias Bonfire.Social.FeedActivities
+  # alias Bonfire.Social.FeedActivities
   # alias Bonfire.Social.Feeds
   alias Bonfire.Social.Objects
   alias Bonfire.Social
-  alias Bonfire.Social.PostContents
+  # alias Bonfire.Social.PostContents
   alias Bonfire.Social.Tags
   alias Bonfire.Social.Threads
 
@@ -705,7 +703,7 @@ defmodule Bonfire.Posts do
          (is_list(attrs[:mentions]) or is_map(attrs[:mentions])) and
          attrs[:mentions] != [] and attrs[:mentions] != %{} do
       info("treat as Message if private with @ mentions")
-      Bonfire.Messages.send(creator, attrs)
+      maybe_apply(Bonfire.Messages, :send, [creator, attrs])
     else
       # FIXME: should this use mentions for remote rather than custom?
       boundary =
@@ -760,10 +758,8 @@ defmodule Bonfire.Posts do
         # TODO: can we assume the type and ID for mixins? to avoid storing extra data in the index
         # "id" => id, # no need as can be inferred later by `Enums.maybe_to_structs/1`
         # "index_type" => Types.module_to_str(Replied),
-        "thread_id" =>
-          e(content, :replied, :thread_id, nil) || e(activity, :replied, :thread_id, nil),
-        "reply_to_id" =>
-          e(content, :replied, :reply_to_id, nil) || e(activity, :replied, :reply_to_id, nil)
+        "thread_id" => e(replied, :thread_id, nil),
+        "reply_to_id" => e(replied, :reply_to_id, nil)
       },
       "created" =>
         maybe_apply(Bonfire.Me.Integration, :indexing_format_created, [object],
