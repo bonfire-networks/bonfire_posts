@@ -165,8 +165,8 @@ defmodule Bonfire.Posts.PostsTest do
 
     post = fake_post!(user, "public")
 
-    assert FeedActivities.feed_contains?(:outbox, post, current_user: user)
-    refute FeedActivities.feed_contains?(:inbox, post, current_user: user)
-    refute FeedActivities.feed_contains?(:notifications, post, current_user: user)
+    assert Bonfire.Social.FeedLoader.feed_contains?(:outbox, post, current_user: user)
+    refute Bonfire.Social.FeedLoader.feed_contains?(:inbox, post, current_user: user)
+    refute Bonfire.Social.FeedLoader.feed_contains?(:notifications, post, current_user: user)
   end
 end

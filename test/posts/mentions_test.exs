@@ -43,7 +43,7 @@ defmodule Bonfire.Posts.MentionsTest do
                boundary: "mentions"
              )
 
-    assert FeedActivities.feed_contains?(:notifications, mention,
+    assert Bonfire.Social.FeedLoader.feed_contains?(:notifications, mention,
              current_user: me,
              skip_boundary_check: true
            )
@@ -66,7 +66,7 @@ defmodule Bonfire.Posts.MentionsTest do
                boundary: "mentions"
              )
 
-    assert FeedActivities.feed_contains?(:notifications, mention, current_user: me)
+    assert Bonfire.Social.FeedLoader.feed_contains?(:notifications, mention, current_user: me)
   end
 
   # duplicate of previous test
@@ -89,7 +89,7 @@ defmodule Bonfire.Posts.MentionsTest do
 
   #   # debug_my_grants_on(mentioned, mention)
 
-  #   assert FeedActivities.feed_contains?(:notifications, mention, current_user: mentioned)
+  #   assert Bonfire.Social.FeedLoader.feed_contains?(:notifications, mention, current_user: mentioned)
   # end
 
   test "mentioning someone does not appear in my own notifications" do
@@ -109,7 +109,7 @@ defmodule Bonfire.Posts.MentionsTest do
                boundary: "mentions"
              )
 
-    refute FeedActivities.feed_contains?(:notifications, mention, current_user: me)
+    refute Bonfire.Social.FeedLoader.feed_contains?(:notifications, mention, current_user: me)
   end
 
   test "mentioning someone else does not appear in a 3rd party's notifications" do
@@ -131,7 +131,7 @@ defmodule Bonfire.Posts.MentionsTest do
 
     third = Fake.fake_user!()
 
-    refute FeedActivities.feed_contains?(:notifications, mention, current_user: third)
+    refute Bonfire.Social.FeedLoader.feed_contains?(:notifications, mention, current_user: third)
   end
 
   test "mentioning someone does not appear in their home feed, if they don't follow me, and have disabled notifications in home feed" do
@@ -163,7 +163,7 @@ defmodule Bonfire.Posts.MentionsTest do
                boundary: "mentions"
              )
 
-    refute FeedActivities.feed_contains?(:my, mention, current_user: mentioned)
+    refute Bonfire.Social.FeedLoader.feed_contains?(:my, mention, current_user: mentioned)
   end
 
   test "mentioning someone appears in their home feed, if they don't follow me, and have enabled notifications in home feed" do
@@ -185,7 +185,7 @@ defmodule Bonfire.Posts.MentionsTest do
                boundary: "mentions"
              )
 
-    assert FeedActivities.feed_contains?(:my, mention, current_user: mentioned)
+    assert Bonfire.Social.FeedLoader.feed_contains?(:my, mention, current_user: mentioned)
   end
 
   test "mentioning someone DOES NOT appear (if NOT using the preset 'mentions' boundary) in their instance feed" do
@@ -199,7 +199,7 @@ defmodule Bonfire.Posts.MentionsTest do
     }
 
     assert {:ok, mention} = Posts.publish(current_user: me, post_attrs: attrs)
-    refute FeedActivities.feed_contains?(:local, mention, current_user: mentioned)
+    refute Bonfire.Social.FeedLoader.feed_contains?(:local, mention, current_user: mentioned)
   end
 
   test "mentioning someone appears in my instance feed (if using 'local' preset)" do
@@ -219,7 +219,7 @@ defmodule Bonfire.Posts.MentionsTest do
                boundary: "local"
              )
 
-    assert FeedActivities.feed_contains?(:local, mention, current_user: me)
+    assert Bonfire.Social.FeedLoader.feed_contains?(:local, mention, current_user: me)
   end
 
   test "mentioning someone does not appear in a 3rd party's instance feed (if not included in circles)" do
@@ -234,7 +234,7 @@ defmodule Bonfire.Posts.MentionsTest do
 
     assert {:ok, mention} = Posts.publish(current_user: me, post_attrs: attrs)
     third = Fake.fake_user!()
-    refute = FeedActivities.feed_contains?(:local, mention, current_user: third)
+    refute = Bonfire.Social.FeedLoader.feed_contains?(:local, mention, current_user: third)
   end
 
   test "mentioning someone with 'local' preset does not appear *publicly* in the instance feed" do
@@ -254,6 +254,6 @@ defmodule Bonfire.Posts.MentionsTest do
                boundary: "local"
              )
 
-    refute FeedActivities.feed_contains?(:local, mention)
+    refute Bonfire.Social.FeedLoader.feed_contains?(:local, mention)
   end
 end
