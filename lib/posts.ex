@@ -261,7 +261,7 @@ defmodule Bonfire.Posts do
   def list_by(by_user, opts \\ []) do
     # query FeedPublish
     # [posts_by: {by_user, &filter/3}]
-    Objects.filter(:by, by_user, query_base())
+    Objects.maybe_filter(query_base(), {:creators, by_user})
     |> list_paginated(to_options(opts) ++ [subject_user: by_user])
   end
 
