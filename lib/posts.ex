@@ -90,6 +90,7 @@ defmodule Bonfire.Posts do
   """
   def publish(opts) do
     run_epic(:publish, to_options(opts))
+    # |> debug("published")
   end
 
   @doc """
