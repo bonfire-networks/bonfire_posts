@@ -47,8 +47,8 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     assert post_reply.replied.thread_id == post.id
   end
 
-  # is this desirable behaviour when there's no @ mention?
-  @tag :fixme
+  # is this desirable behaviour when there's no @ mention? prob should be configurable
+  @tag :todo
   test "see a public reply to something I posted in my notifications" do
     me = Fake.fake_user!()
     someone = Fake.fake_user!()
@@ -83,7 +83,8 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     # me = Bonfire.Me.Users.get_current(me.id)
     assert %{edges: edges} = FeedActivities.feed(:notifications, current_user: me)
 
-    assert List.first(edges).activity.object_id == post_reply.id
+    assert first = List.first(edges)
+    assert first.activity.object_id == post_reply.id
   end
 
   test "fetching a reply works" do

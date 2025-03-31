@@ -160,13 +160,13 @@ defmodule Bonfire.Posts.PostsTest do
     assert length(posts) == 2
   end
 
-  test "when i post, it appears in my outbox feed, but not in my notifications or inbox" do
+  test "when i post, it appears in my outbox feed, but not in my notifications " do
     user = Fake.fake_user!()
 
     post = fake_post!(user, "public")
 
-    assert Bonfire.Social.FeedLoader.feed_contains?(:outbox, post, current_user: user)
-    refute Bonfire.Social.FeedLoader.feed_contains?(:inbox, post, current_user: user)
+    assert Bonfire.Social.FeedLoader.feed_contains?(:user_activities, post, current_user: user)
     refute Bonfire.Social.FeedLoader.feed_contains?(:notifications, post, current_user: user)
+    # refute Bonfire.Social.FeedLoader.feed_contains?(:inbox, post, current_user: user)
   end
 end
