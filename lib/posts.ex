@@ -421,8 +421,7 @@ defmodule Bonfire.Posts do
         tags: [:character]
       ])
       |> Activities.object_preload_create_activity()
-
-    # |> debug("post to federate")
+      |> debug("post to federate")
 
     subject =
       subject ||

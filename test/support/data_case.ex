@@ -28,6 +28,8 @@ defmodule Bonfire.Posts.DataCase do
       import Bonfire.Social
       import Bonfire.Social.Fake
       import Bonfire.Posts.Fake
+
+      @moduletag :backend
     end
   end
 

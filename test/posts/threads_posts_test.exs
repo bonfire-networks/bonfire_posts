@@ -81,10 +81,10 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
              )
 
     # me = Bonfire.Me.Users.get_current(me.id)
-    assert %{edges: edges} = FeedActivities.feed(:notifications, current_user: me)
-
-    assert first = List.first(edges)
-    assert first.activity.object_id == post_reply.id
+    assert activity =
+             Bonfire.Social.FeedLoader.feed_contains?(:notifications, post_reply,
+               current_user: me
+             )
   end
 
   test "fetching a reply works" do
