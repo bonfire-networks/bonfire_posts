@@ -556,10 +556,10 @@ defmodule Bonfire.Posts do
                "bcc" => bcc
              }
            },
-         {:ok, activity} <- ap_create_or_update(verb, params, object) do
+         {:ok, activity} <-
+           ap_create_or_update(verb, params, object) |> debug("ap_created_or_updated") do
       {:ok, activity}
     end
-    |> debug("donzz")
   end
 
   defp ap_create_or_update(:edit, params, object) do
