@@ -6,7 +6,6 @@ defmodule Bonfire.Posts do
   use Bonfire.Common.E
   import Bonfire.Boundaries.Queries
   alias Bonfire.Data.Social.Post
-  # alias Bonfire.Data.Social.PostContent
   # alias Bonfire.Data.Social.Replied
   # alias Bonfire.Data.Social.Activity
 
