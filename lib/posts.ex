@@ -656,9 +656,10 @@ defmodule Bonfire.Posts do
 
     # |> uid()
 
+    # TODO: put somewhere reusable by other types
+    # TODO: also take the `context` into account as thread_id
     reply_to = post_data["inReplyTo"] || activity_data["inReplyTo"]
 
-    #  TODO: put somewhere reusable by other types
     reply_to_id =
       if reply_to,
         do:
@@ -667,7 +668,8 @@ defmodule Bonfire.Posts do
           |> List.first()
           |> debug()
           |> ActivityPub.Object.get_cached!(ap_id: ...)
-          |> e(:pointer_id, nil)
+
+    reply_to_id = e(reply_to, :pointer_id, nil)
 
     to_circles =
       circles ++
@@ -690,10 +692,15 @@ defmodule Bonfire.Posts do
         reply_to_id: reply_to_id
       })
 
-    if !is_public and
-         (is_list(attrs[:mentions]) or is_map(attrs[:mentions])) and
-         attrs[:mentions] != [] and attrs[:mentions] != %{} do
-      info("treat as Message if private with @ mentions")
+    has_mentions =
+      (is_list(attrs[:mentions]) or is_map(attrs[:mentions])) and attrs[:mentions] != [] and
+        attrs[:mentions] != %{}
+
+    if (!is_public and has_mentions) &&
+         (!reply_to ||
+            Bonfire.Common.Types.object_type(repo().maybe_preload(reply_to, :pointer)) ==
+              Bonfire.Data.Social.Message) do
+      info("treat as Message if private with @ mentions that isn't a reply to a non-DM")
       maybe_apply(Bonfire.Messages, :send, [creator, attrs])
     else
       # FIXME: should this use mentions for remote rather than custom?
