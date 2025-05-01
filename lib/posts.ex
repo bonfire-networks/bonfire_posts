@@ -660,16 +660,19 @@ defmodule Bonfire.Posts do
     # TODO: also take the `context` into account as thread_id
     reply_to = post_data["inReplyTo"] || activity_data["inReplyTo"]
 
-    reply_to_id =
+    reply_to =
       if reply_to,
         do:
           (e(reply_to, "items", nil) || e(reply_to, "id", nil) || reply_to)
           |> List.wrap()
           |> List.first()
-          |> debug()
+          |> debug("reply_to_ap_id")
           |> ActivityPub.Object.get_cached!(ap_id: ...)
+          |> debug("reply_to_ap")
 
-    reply_to_id = e(reply_to, :pointer_id, nil)
+    reply_to_id =
+      e(reply_to, :pointer_id, nil)
+      |> debug("reply_to_id")
 
     to_circles =
       circles ++
@@ -698,7 +701,11 @@ defmodule Bonfire.Posts do
 
     if (!is_public and has_mentions) &&
          (!reply_to ||
-            Bonfire.Common.Types.object_type(repo().maybe_preload(reply_to, :pointer)) ==
+            Bonfire.Common.Types.object_type(
+              repo().maybe_preload(reply_to, :pointer)
+              |> e(:pointer, nil)
+            )
+            |> debug("reply_to_type") ==
               Bonfire.Data.Social.Message) do
       info("treat as Message if private with @ mentions that isn't a reply to a non-DM")
       maybe_apply(Bonfire.Messages, :send, [creator, attrs])
