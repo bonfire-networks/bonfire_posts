@@ -10,6 +10,7 @@ defmodule Bonfire.Posts.Fake do
     {:ok, post} =
       Posts.publish(
         [
+          post_id: attrs[:id],
           current_user: user,
           post_attrs:
             attrs ||
@@ -32,6 +33,7 @@ defmodule Bonfire.Posts.Fake do
   def fake_comment!(user, reply_to, boundary \\ nil, attrs \\ nil) do
     {:ok, post} =
       Posts.publish(
+        post_id: attrs[:id],
         current_user: user,
         post_attrs:
           attrs ||
