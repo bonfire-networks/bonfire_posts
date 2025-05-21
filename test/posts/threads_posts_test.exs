@@ -322,7 +322,7 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
 
     assert %{edges: replies} = Threads.list_replies(post.id, user)
 
-    threaded_replies = Bonfire.Social.Threads.arrange_replies_tree(replies)
+    threaded_replies = Bonfire.Social.Threads.prepare_replies_tree(replies, current_user: user)
 
     debug(threaded_replies, "threaded_replies_tree")
 
