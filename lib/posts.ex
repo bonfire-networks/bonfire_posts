@@ -235,10 +235,16 @@ defmodule Bonfire.Posts do
   """
   def read(post_id, opts \\ [])
       when is_binary(post_id) do
-    opts = Keyword.merge(to_options(opts), verbs: [:read])
+    opts =
+      to_options(opts)
+      |> Keyword.put(:verbs, [:read])
 
     query([id: post_id], opts)
-    |> Objects.read(opts)
+    |> Objects.read(
+      opts
+      |> Keyword.put(:skip_boundary_check, true)
+      # ^ avoid checking boundary twice
+    )
   end
 
   @doc """
