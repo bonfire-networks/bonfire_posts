@@ -626,65 +626,25 @@ defmodule Bonfire.Posts do
     post_data = e(ap_object, :data, %{})
     id = e(ap_object, :pointer_id, nil)
 
-    # TODO: put somewhere reusable so other types also use this
-    is_public =
-      case {e(ap_object, :public, nil), e(ap_activity, :public, nil)} do
-        {true, true} -> true
-        {nil, true} -> true
-        {true, nil} -> true
-        _ -> false
-      end
-      |> debug("is_public?")
-
-    circles = if is_public, do: [:guest], else: []
-
-    #  TODO: put somewhere reusable by other types
-    direct_recipients =
-      (List.wrap(activity_data["to"]) ++
-         List.wrap(activity_data["cc"]) ++
-         List.wrap(activity_data["audience"]) ++
-         List.wrap(post_data["to"]) ++
-         List.wrap(post_data["cc"]) ++
-         List.wrap(post_data["audience"]))
-      |> filter_empty([])
-      |> List.delete(Bonfire.Federate.ActivityPub.AdapterUtils.public_uri())
-      |> debug("incoming recipients")
-      |> Enum.map(fn ap_id ->
-        with {:ok, user} <- Bonfire.Me.Users.by_ap_id(ap_id) do
-          {ap_id, user |> repo().maybe_preload(:settings)}
-        else
-          _ ->
-            nil
-        end
-      end)
-      |> filter_empty([])
-      |> debug("incoming users")
-
-    # |> uid()
-
-    # TODO: put somewhere reusable by other types
-    # TODO: also take the `context` into account as thread_id
-    reply_to = post_data["inReplyTo"] || activity_data["inReplyTo"]
-
-    reply_to =
-      if reply_to,
-        do:
-          (e(reply_to, "items", nil) || e(reply_to, "id", nil) || reply_to)
-          |> List.wrap()
-          |> List.first()
-          |> debug("reply_to_ap_id")
-          |> ActivityPub.Object.get_cached!(ap_id: ...)
-          |> debug("reply_to_ap")
+    reply_to_ap_object = Threads.reply_to_ap_object(activity_data, post_data)
 
     reply_to_id =
-      e(reply_to, :pointer_id, nil)
+      e(reply_to_ap_object, :pointer_id, nil)
       |> debug("reply_to_id")
 
-    to_circles =
-      circles ++
-        Enum.map(direct_recipients || [], fn {_, character} ->
-          if Bonfire.Social.federating?(character), do: id(character)
-        end)
+    is_public? = Bonfire.Federate.ActivityPub.AdapterUtils.is_public?(ap_activity, ap_object)
+
+    direct_recipients =
+      Bonfire.Federate.ActivityPub.AdapterUtils.all_known_recipient_characters(
+        activity_data,
+        post_data
+      )
+
+    {boundary, to_circles} =
+      Bonfire.Federate.ActivityPub.AdapterUtils.recipients_boundary_circles(
+        direct_recipients,
+        is_public?
+      )
 
     attrs =
       Bonfire.Social.PostContents.ap_receive_attrs_prepare(
@@ -697,40 +657,31 @@ defmodule Bonfire.Posts do
         id: id,
         # huh?
         canonical_url: nil,
+        #  needed here for Messages
         to_circles: to_circles,
         reply_to_id: reply_to_id
       })
 
-    has_mentions =
-      (is_list(attrs[:mentions]) or is_map(attrs[:mentions])) and attrs[:mentions] != [] and
-        attrs[:mentions] != %{}
-
-    if (!is_public and has_mentions) &&
-         (!reply_to ||
+    if !is_public? and not Enum.empty?(to_circles || []) and
+         (!reply_to_id or
             Bonfire.Common.Types.object_type(
-              repo().maybe_preload(reply_to, :pointer)
+              repo().maybe_preload(reply_to_ap_object, :pointer)
               |> e(:pointer, nil)
             )
-            |> debug("reply_to_type") ==
+            |> debug("replying_to_type") ==
               Bonfire.Data.Social.Message) do
       info("treat as Message if private with @ mentions that isn't a reply to a non-DM")
       maybe_apply(Bonfire.Messages, :send, [creator, attrs])
     else
-      # FIXME: should this use mentions for remote rather than custom?
-      boundary =
-        if(is_public, do: "public_remote", else: "custom")
-        |> debug("set boundary")
-
       publish(
-        local: false,
-        current_user: creator,
-        post_attrs: attrs,
-        boundary: boundary,
-        to_circles: to_circles,
-        post_id: id,
-        emoji: e(post_data, "emoji", nil),
-        # to preserve MFM
-        do_not_strip_html: e(post_data, "source", "mediaType", nil) == "text/x.misskeymarkdown"
+        Keyword.merge(attrs[:opts] || [],
+          local: false,
+          current_user: creator,
+          post_attrs: attrs,
+          boundary: boundary,
+          to_circles: to_circles,
+          post_id: id
+        )
       )
     end
   end
