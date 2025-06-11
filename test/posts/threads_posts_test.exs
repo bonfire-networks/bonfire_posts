@@ -12,7 +12,6 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     attrs = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message</p>"
       }
     }
@@ -91,7 +90,6 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     attrs = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message</p>"
       }
     }
@@ -132,7 +130,6 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     attrs = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message</p>"
       }
     }
@@ -176,7 +173,6 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     attrs = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message</p>"
       }
     }
@@ -244,14 +240,14 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
 
   # Forking is not yet fully worked out.
   # test "can get nested replies across a fork" do
-  #   attrs = %{post_content: %{summary: "summary", name: "name", html_body: "<p>epic html message</p>"}}
+  #   attrs = %{post_content: %{summary: "summary", html_body: "<p>epic html message</p>"}}
   #   user = Fake.fake_user!()
   #   assert {:ok, post} = Posts.publish(current_user: user, post_attrs: attrs, boundary: "public")
 
-  #   attrs_reply = %{post_content: %{summary: "summary", name: "name 2", html_body: "<p>epic html message</p>"}, reply_to_id: post.id}
+  #   attrs_reply = %{post_content: %{summary: "summary", html_body: "<p>epic html message</p>"}, reply_to_id: post.id}
   #   assert {:ok, post_reply} = Posts.publish(current_user: user, post_attrs: attrs_reply, boundary: "public")
 
-  #   attrs_reply3 = %{post_content: %{summary: "summary", name: "name 3", html_body: "<p>epic html message</p>"}, reply_to_id: post_reply.id, thread_id: post_reply.id}
+  #   attrs_reply3 = %{post_content: %{summary: "summary", html_body: "<p>epic html message</p>"}, reply_to_id: post_reply.id, thread_id: post_reply.id}
   #   assert {:ok, post_reply3} = Posts.publish(current_user: user, post_attrs: attrs_reply3, boundary: "public")
 
   #   assert %{edges: replies} = Threads.list_replies(post.id, user)
@@ -274,7 +270,6 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     attrs = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message</p>"
       }
     }

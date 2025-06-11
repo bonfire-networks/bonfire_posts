@@ -17,13 +17,12 @@ defmodule Bonfire.Posts.PostsTest do
       fake_post!(user, "public", %{
         post_content: %{
           summary: "summary",
-          name: "name",
           html_body: "epic html"
         }
       })
 
     assert String.contains?(post.post_content.html_body, "epic html")
-    assert post.post_content.name =~ "name"
+    assert post.post_content.summary =~ "summary"
     assert post.post_content.summary =~ "summary"
     assert post.created.creator_id == user.id
   end
@@ -66,7 +65,6 @@ defmodule Bonfire.Posts.PostsTest do
     attrs_1 = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message 1</p>"
       }
     }
@@ -74,7 +72,6 @@ defmodule Bonfire.Posts.PostsTest do
     attrs_2 = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message 2</p>"
       }
     }
@@ -82,7 +79,6 @@ defmodule Bonfire.Posts.PostsTest do
     attrs_3 = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message 3</p>"
       }
     }
@@ -112,7 +108,6 @@ defmodule Bonfire.Posts.PostsTest do
     attrs_1 = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message 1</p>"
       }
     }
@@ -120,7 +115,6 @@ defmodule Bonfire.Posts.PostsTest do
     attrs_2 = %{
       post_content: %{
         summary: "summary",
-        name: "name",
         html_body: "<p>epic html message 2</p>"
       }
     }
