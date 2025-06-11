@@ -521,7 +521,12 @@ defmodule Bonfire.Posts do
              "sensitive" => e(post, :sensitive, :is_sensitive, false),
              "name" => e(post, :post_content, :name, nil),
              "summary" => e(post, :post_content, :summary, nil),
-             "content" => Text.maybe_markdown_to_html(e(post, :post_content, :html_body, nil)),
+             "content" =>
+               Text.maybe_markdown_to_html(
+                 e(post, :post_content, :html_body, nil),
+                 # we don't want to escape HTML in local content
+                 sanitize: true
+               ),
              "attachment" => Bonfire.Files.ap_publish_activity(e(post, :media, nil)),
              # TODO support replies and context for all object types, not just posts
              "inReplyTo" =>
