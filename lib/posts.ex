@@ -516,7 +516,12 @@ defmodule Bonfire.Posts do
              }
            },
          {:ok, activity} <-
-           ap_create_or_update(verb, params, maybe_note_to_article(object) || object) do
+           ap_create_or_update(
+             verb,
+             params,
+             (maybe_note_to_article(object, object["id"] || URIs.canonical_url(post)) || object)
+             |> Map.merge(%{"to" => to, "cc" => cc, "bcc" => bcc})
+           ) do
       {:ok, activity}
     end
   end
@@ -581,7 +586,7 @@ defmodule Bonfire.Posts do
     |> Enum.into(%{})
   end
 
-  def maybe_note_to_article(object) do
+  def maybe_note_to_article(object, url) do
     name = object["name"]
     content = object["content"]
 
@@ -616,7 +621,7 @@ defmodule Bonfire.Posts do
       object
       |> Map.put("type", "Article")
       # Add url field pointing to the object's id
-      |> Map.put("url", object["id"])
+      |> Map.put("url", url)
       # Add first image if any as cover image - TODO: have the user select which one?
       |> Enums.maybe_put("image", first_image)
       |> Map.put("preview", preview)
