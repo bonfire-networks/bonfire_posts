@@ -593,14 +593,17 @@ defmodule Bonfire.Posts do
     if is_binary(name) and
          byte_size(name) > 2 and
          String.length(content || "") > Bonfire.Social.Activities.article_char_threshold() do
+      custom_summary = object["summary"]
+      summary = custom_summary || content
+
       # Create simplified preview Note with only essential fields
       preview =
         %{
           "type" => "Note",
           "name" => name,
-          "summary" => object["summary"],
+          "summary" => summary,
           #  NOTE: should we include the full content or just a excerpt?
-          "content" => content
+          "content" => if(custom_summary, do: content)
         }
         |> Enum.filter(fn {_, v} -> not is_nil(v) end)
         |> Enum.into(%{})
@@ -620,6 +623,10 @@ defmodule Bonfire.Posts do
       # Convert Note to Article and embed simplified Note as preview
       object
       |> Map.put("type", "Article")
+      # make sure we have summary where Masto expects it
+      |> Map.put("summary", summary)
+      # avoid duplicating the content in both fields
+      |> Map.put("content", if(custom_summary, do: content))
       # Add url field pointing to the object's id
       |> Map.put("url", url)
       # Add first image if any as cover image - TODO: have the user select which one?
