@@ -445,6 +445,8 @@ defmodule Bonfire.Posts do
 
     # TODO: should we just include ALL thread participants? ^
 
+    reply_to_id = e(post, :replied, :reply_to_id, nil)
+
     is_public = Bonfire.Boundaries.object_public?(post)
 
     to =
@@ -455,25 +457,12 @@ defmodule Bonfire.Posts do
       end
 
     thread_id = e(post, :replied, :thread_id, nil)
-    reply_to_id = e(post, :replied, :reply_to_id, nil)
 
     with {:ok, actor} <-
            ActivityPub.Actor.get_cached(pointer: subject),
-
          # TODO: find a better way of deleting non-actor entries from the list
          # (or better: represent them in AP)
          # Note: `mentions` preset adds grants to mentioned people which should trigger the boundaries-based logic in `Adapter.external_followers_for_activity`, so should we use this only for tagging and not for addressing (if we expand the scope of that function beyond followers)?
-         hashtags <-
-           e(post, :tags, [])
-           #  |> info("tags")
-           #  non-characters
-           |> Enum.reject(fn tag ->
-             not is_nil(e(tag, :character, nil))
-           end)
-           |> filter_empty([])
-           |> Bonfire.Common.Needles.list!(skip_boundary_check: true)
-           #  |> repo().maybe_preload(:named)
-           |> debug("include_as_hashtags"),
          mentions <-
            e(post, :tags, [])
            |> debug("tags")
@@ -506,69 +495,131 @@ defmodule Bonfire.Posts do
          # end),
          bcc <- [],
          context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
-         #  to <- to ++ Enum.map(mentions, fn actor -> actor.ap_id end),
-         object <-
-           %{
-             "type" => "Note",
-             "actor" => actor.ap_id,
-             "attributedTo" => actor.ap_id,
-             "to" => to,
-             "cc" => cc,
-             # TODO: put somewhere reusable by other types:
-             "indexable" =>
-               Bonfire.Common.Extend.module_enabled?(Bonfire.Search.Indexer, subject),
-             # TODO: put somewhere reusable by other types:
-             "sensitive" => e(post, :sensitive, :is_sensitive, false),
-             "name" => e(post, :post_content, :name, nil),
-             "summary" => e(post, :post_content, :summary, nil),
-             "content" =>
-               Text.maybe_markdown_to_html(
-                 e(post, :post_content, :html_body, nil),
-                 # we don't want to escape HTML in local content
-                 sanitize: true
-               ),
-             "attachment" => Bonfire.Files.ap_publish_activity(e(post, :media, nil)),
-             # TODO support replies and context for all object types, not just posts
-             "inReplyTo" =>
-               if(reply_to_id == thread_id, do: context) ||
-                 if(reply_to_id != id, do: Threads.ap_prepare(reply_to_id)),
-             "context" => context,
-             "tag" =>
-               Enum.map(mentions, fn actor ->
-                 %{
-                   "href" => actor.ap_id,
-                   "name" => actor.username,
-                   "type" => "Mention"
-                 }
-               end) ++
-                 Enum.map(hashtags, fn tag ->
-                   %{
-                     "href" => URIs.canonical_url(tag),
-                     "name" => "##{e(tag, :name, nil) || e(tag, :named, :name, nil)}",
-                     "type" => "Hashtag"
-                   }
-                 end)
-           }
-           |> Enum.filter(fn {_, v} -> not is_nil(v) end)
-           |> Enum.into(%{}),
+         reply_to <-
+           if(reply_to_id == thread_id, do: context) ||
+             if(reply_to_id != id, do: Threads.ap_prepare(reply_to_id)),
+         # TODO ^ support replies and context for all object types, not just posts
+         object <- prepare_object_note(subject, verb, post, actor, mentions, context, reply_to),
          params <-
            %{
              pointer: id,
              local: true,
              actor: actor,
              context: context,
-             to: to,
              published:
                DatesTimes.date_from_pointer(id)
                |> DateTime.to_iso8601(),
+             to: to,
              additional: %{
                "cc" => cc,
                "bcc" => bcc
              }
            },
          {:ok, activity} <-
-           ap_create_or_update(verb, params, object) |> debug("ap_created_or_updated") do
+           ap_create_or_update(verb, params, maybe_note_to_article(object) || object) do
       {:ok, activity}
+    end
+  end
+
+  def prepare_object_note(subject, verb, post, actor, mentions, context, reply_to) do
+    html_body = e(post, :post_content, :html_body, nil)
+
+    hashtags =
+      e(post, :tags, [])
+      #  |> info("tags")
+      #  non-characters
+      |> Enum.reject(fn tag ->
+        not is_nil(e(tag, :character, nil))
+      end)
+      |> filter_empty([])
+      |> Bonfire.Common.Needles.list!(skip_boundary_check: true)
+      #  |> repo().maybe_preload(:named)
+      |> debug("include_as_hashtags")
+
+    %{
+      "type" => "Note",
+      #  "actor" => actor.ap_id,
+      "attributedTo" => actor.ap_id,
+      #  "to" => to,
+      #  "cc" => cc,
+      # TODO: put somewhere reusable by other types:
+      "indexable" => Bonfire.Common.Extend.module_enabled?(Bonfire.Search.Indexer, subject),
+      # TODO: put somewhere reusable by other types:
+      "sensitive" => e(post, :sensitive, :is_sensitive, false),
+      "name" => e(post, :post_content, :name, nil),
+      "summary" => e(post, :post_content, :summary, nil),
+      "content" =>
+        Text.maybe_markdown_to_html(
+          html_body,
+          # we don't want to escape HTML in local content
+          sanitize: true
+        ),
+      "source" => %{
+        "content" => html_body,
+        "mediaType" => "text/markdown"
+      },
+      "attachment" => Bonfire.Files.ap_publish_activity(e(post, :media, nil)),
+      "inReplyTo" => reply_to,
+      "context" => context,
+      "tag" =>
+        Enum.map(mentions, fn actor ->
+          %{
+            "href" => actor.ap_id,
+            "name" => actor.username,
+            "type" => "Mention"
+          }
+        end) ++
+          Enum.map(hashtags, fn tag ->
+            %{
+              "href" => URIs.canonical_url(tag),
+              "name" => "##{e(tag, :name, nil) || e(tag, :named, :name, nil)}",
+              "type" => "Hashtag"
+            }
+          end)
+    }
+    |> Enum.filter(fn {_, v} -> not is_nil(v) end)
+    |> Enum.into(%{})
+  end
+
+  def maybe_note_to_article(object) do
+    name = object["name"]
+    content = object["content"]
+
+    if is_binary(name) and
+         byte_size(name) > 2 and
+         String.length(content || "") > Bonfire.Social.Activities.article_char_threshold() do
+      # Create simplified preview Note with only essential fields
+      preview =
+        %{
+          "type" => "Note",
+          "name" => name,
+          "summary" => object["summary"],
+          #  NOTE: should we include the full content or just a excerpt?
+          "content" => content
+        }
+        |> Enum.filter(fn {_, v} -> not is_nil(v) end)
+        |> Enum.into(%{})
+
+      # Find first image attachment for cover image
+      first_image =
+        object["attachment"]
+        |> List.wrap()
+        |> Enum.find(fn attachment ->
+          case attachment do
+            %{"mediaType" => media_type} -> String.starts_with?(media_type, "image/")
+            %{"type" => "Image"} -> true
+            _ -> false
+          end
+        end)
+
+      # Convert Note to Article and embed simplified Note as preview
+      object
+      |> Map.put("type", "Article")
+      # Add url field pointing to the object's id
+      |> Map.put("url", object["id"])
+      # Add first image if any as cover image - TODO: have the user select which one?
+      |> Enums.maybe_put("image", first_image)
+      |> Map.put("preview", preview)
     end
   end
 
