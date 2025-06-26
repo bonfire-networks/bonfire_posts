@@ -541,6 +541,9 @@ defmodule Bonfire.Posts do
       #  |> repo().maybe_preload(:named)
       |> debug("include_as_hashtags")
 
+    {primary_image, other_media} = Bonfire.Files.split_primary_image(e(post, :media, nil))
+    # |> debug("splitss")
+
     %{
       "type" => "Note",
       #  "actor" => actor.ap_id,
@@ -563,7 +566,10 @@ defmodule Bonfire.Posts do
         "content" => html_body,
         "mediaType" => "text/markdown"
       },
-      "attachment" => Bonfire.Files.ap_publish_activity(e(post, :media, nil)),
+      "image" =>
+        maybe_apply(Bonfire.Files, :ap_publish_activity, [primary_image], fallback_return: nil),
+      "attachment" =>
+        maybe_apply(Bonfire.Files, :ap_publish_activity, [other_media], fallback_return: nil),
       "inReplyTo" => reply_to,
       "context" => context,
       "tag" =>
@@ -609,16 +615,16 @@ defmodule Bonfire.Posts do
         |> Enum.into(%{})
 
       # Find first image attachment for cover image
-      first_image =
-        object["attachment"]
-        |> List.wrap()
-        |> Enum.find(fn attachment ->
-          case attachment do
-            %{"mediaType" => media_type} -> String.starts_with?(media_type, "image/")
-            %{"type" => "Image"} -> true
-            _ -> false
-          end
-        end)
+      # first_image =
+      #   object["attachment"]
+      #   |> List.wrap()
+      #   |> Enum.find(fn attachment ->
+      #     case attachment do
+      #       %{"mediaType" => media_type} -> String.starts_with?(media_type, "image/")
+      #       %{"type" => "Image"} -> true
+      #       _ -> false
+      #     end
+      #   end)
 
       # Convert Note to Article and embed simplified Note as preview
       object
@@ -630,7 +636,6 @@ defmodule Bonfire.Posts do
       # Add url field pointing to the object's id
       |> Map.put("url", url)
       # Add first image if any as cover image - TODO: have the user select which one?
-      |> Enums.maybe_put("image", first_image)
       |> Map.put("preview", preview)
     end
   end
