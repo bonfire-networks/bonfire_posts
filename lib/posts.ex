@@ -92,6 +92,10 @@ defmodule Bonfire.Posts do
     # |> debug("published")
   end
 
+  def publish(post_attrs, opts) do
+    publish(to_options(opts) |> Keyword.put(:post_attrs, post_attrs))
+  end
+
   @doc """
   Deletes a post.
 
