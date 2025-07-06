@@ -17,7 +17,7 @@ defmodule Bonfire.Posts do
   # alias Bonfire.Social.Feeds
   alias Bonfire.Social.Objects
   alias Bonfire.Social
-  # alias Bonfire.Social.PostContents
+  alias Bonfire.Social.PostContents
   alias Bonfire.Social.Tags
   alias Bonfire.Social.Threads
 
@@ -41,10 +41,12 @@ defmodule Bonfire.Posts do
   def federation_module,
     do: [
       "Note",
+      "Article",
+      "ChatMessage",
       {"Create", "Note"},
-      # {"Update", "Note"},
-      {"Create", "Article"}
-      # {"Update", "Article"}
+      {"Update", "Note"},
+      {"Create", "Article"},
+      {"Update", "Article"}
     ]
 
   @doc """
@@ -193,7 +195,7 @@ defmodule Bonfire.Posts do
   """
   def changeset(action, attrs, creator \\ nil, preset \\ nil)
 
-  def changeset(:create, attrs, _creator, _preset) when attrs == %{} do
+  def changeset(_, attrs, _creator, _preset) when attrs == %{} do
     # keep it simple for forms
     Post.changeset(%Post{}, attrs)
   end
@@ -203,6 +205,10 @@ defmodule Bonfire.Posts do
     |> prepare_post_attrs()
     |> debug("post_attrs")
     |> Post.changeset(%Post{}, ...)
+  end
+
+  def changeset(_, attrs, _creator, _preset_or_custom_boundary) do
+    Post.changeset(%Post{}, attrs)
   end
 
   def prepare_post_attrs(attrs) do
@@ -691,13 +697,47 @@ defmodule Bonfire.Posts do
   """
   def ap_receive_activity(
         creator,
+        %{data: %{"type" => "Update"} = activity_data} = _ap_activity,
+        ap_object
+      ) do
+    # debug(activity_data, "do_an_update")
+    post_data = e(ap_object, :data, %{})
+
+    #  with %{pointer_id: pointer_id} = _original_object when is_binary(pointer_id) <-
+    #    ActivityPub.Object.get_activity_for_object_ap_id(post_data) do
+    with {:ok, %{pointer_id: pointer_id} = original_object} when is_binary(pointer_id) <-
+           ActivityPub.Object.get_cached(ap_id: post_data),
+         {:ok, post} <-
+           e(original_object, :pointer, nil) || read(pointer_id, skip_boundary_check: true),
+         {:ok, attrs, updated_post_content} <-
+           PostContents.ap_receive_update(creator, activity_data, post_data, pointer_id),
+         post =
+           post
+           |> Map.put(:post_content, updated_post_content)
+           |> repo().maybe_preload([:sensitive, :tags, :media]) do
+      # debug(pointer_id, "original_object")
+
+      # Update metadata too: sensitive, hashtags, mentions, media
+      update_post_assocs(creator, post, attrs)
+      # |> debug("post after metadata update")
+
+      {:ok, post}
+
+      # else
+      #   e ->
+      #     error(e, "Could not find the object being updated.")
+    end
+  end
+
+  def ap_receive_activity(
+        creator,
         ap_activity,
         ap_object
       )
       when not is_nil(creator) do
-    # debug(activity: activity)
     # debug(creator: creator)
-    # debug(object: object)
+    # debug(ap_activity, "ap_receive_activity: Create")
+    # debug(ap_object, "ap_object")
 
     activity_data = e(ap_activity, :data, %{})
     post_data = e(ap_object, :data, %{})
@@ -724,19 +764,27 @@ defmodule Bonfire.Posts do
       )
 
     attrs =
-      Bonfire.Social.PostContents.ap_receive_attrs_prepare(
+      PostContents.ap_receive_attrs_prepare(
         creator,
         activity_data,
         post_data,
         direct_recipients
       )
-      |> Enum.into(%{
+
+    attrs =
+      Map.merge(attrs, %{
         id: id,
         # huh?
         canonical_url: nil,
         #  needed here for Messages
         to_circles: to_circles,
-        reply_to_id: reply_to_id
+        reply_to_id: reply_to_id,
+        uploaded_media:
+          Bonfire.Files.ap_receive_attachments(
+            creator,
+            attrs[:primary_image],
+            attrs[:attachments]
+          )
       })
 
     if !is_public? and not Enum.empty?(to_circles || []) and
@@ -812,4 +860,33 @@ defmodule Bonfire.Posts do
   end
 
   def count_total(), do: repo().one(select(Post, [u], count(u.id)))
+
+  # Helper function to update post metadata during Update activities
+  # Reuses existing module functions to keep it DRY
+  defp update_post_assocs(creator, %{id: pointer_id} = post, attrs) do
+    with {:ok, post} <- Objects.set_sensitivity(post, attrs[:sensitive]) || {:ok, post},
+         {:ok, post} <- Bonfire.Tag.maybe_update_tags(creator, post, attrs) || {:ok, post},
+         post = repo().preload(post, :files),
+         {:ok, post} <-
+           Bonfire.Files.maybe_update_media_assoc(creator, post, update_changeset(post), attrs) ||
+             {:ok, post} do
+      {:ok, post}
+    end
+  end
+
+  def update_changeset(%{} = post, attrs \\ %{}) do
+    Post.changeset(post, attrs)
+  end
+
+  def update(post, attrs \\ %{})
+
+  def update(%Ecto.Changeset{} = changeset, _) do
+    changeset
+    |> repo().update()
+  end
+
+  def update(post, attrs) do
+    update_changeset(post, attrs)
+    |> update()
+  end
 end
