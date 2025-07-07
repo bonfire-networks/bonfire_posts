@@ -690,7 +690,6 @@ defmodule Bonfire.Posts do
 
     reply_to_id =
       e(reply_to_ap_object, :pointer_id, nil)
-      |> debug("reply_to_id")
 
     is_public? = Bonfire.Federate.ActivityPub.AdapterUtils.is_public?(ap_activity, ap_object)
 
@@ -699,12 +698,14 @@ defmodule Bonfire.Posts do
         activity_data,
         post_data
       )
+      |> debug("direct_recipients")
 
     {boundary, to_circles} =
       Bonfire.Federate.ActivityPub.AdapterUtils.recipients_boundary_circles(
         direct_recipients,
         is_public?
       )
+      |> debug("boundary & to_circles")
 
     attrs =
       PostContents.ap_receive_attrs_prepare(
@@ -730,6 +731,9 @@ defmodule Bonfire.Posts do
           )
       })
 
+    debug(to_circles, "to_circles")
+    debug(reply_to_id, "reply_to_id")
+
     if !is_public? and not Enum.empty?(to_circles || []) and
          (!reply_to_id or
             Bonfire.Common.Types.object_type(
@@ -741,6 +745,8 @@ defmodule Bonfire.Posts do
       info("treat as Message if private with @ mentions that isn't a reply to a non-DM")
       maybe_apply(Bonfire.Messages, :send, [creator, attrs])
     else
+      info(is_public?, "treat as Post - public?")
+
       publish(
         Keyword.merge(attrs[:opts] || [],
           local: false,
