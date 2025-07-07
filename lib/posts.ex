@@ -503,13 +503,21 @@ defmodule Bonfire.Posts do
            |> Enum.map(& &1.ap_id)
            |> debug("direct_recipients"),
          # end),
-         bcc <- [],
          context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
          reply_to <-
            if(reply_to_id == thread_id, do: context) ||
              if(reply_to_id != id, do: Threads.ap_prepare(reply_to_id)),
          # TODO ^ support replies and context for all object types, not just posts
-         object <- prepare_object_note(subject, verb, post, actor, mentions, context, reply_to),
+         object <-
+           PostContents.ap_prepare_object_note(
+             subject,
+             verb,
+             post,
+             actor,
+             mentions,
+             context,
+             reply_to
+           ),
          params <-
            %{
              pointer: id,
@@ -521,8 +529,7 @@ defmodule Bonfire.Posts do
                |> DateTime.to_iso8601(),
              to: to,
              additional: %{
-               "cc" => cc,
-               "bcc" => bcc
+               "cc" => cc
              }
            },
          {:ok, activity} <-
@@ -530,76 +537,10 @@ defmodule Bonfire.Posts do
              verb,
              params,
              (maybe_note_to_article(object, object["id"] || URIs.canonical_url(post)) || object)
-             |> Map.merge(%{"to" => to, "cc" => cc, "bcc" => bcc})
+             |> Map.merge(%{"to" => to, "cc" => cc})
            ) do
       {:ok, activity}
     end
-  end
-
-  def prepare_object_note(subject, verb, post, actor, mentions, context, reply_to) do
-    html_body = e(post, :post_content, :html_body, nil)
-
-    hashtags =
-      e(post, :tags, [])
-      #  |> info("tags")
-      #  non-characters
-      |> Enum.reject(fn tag ->
-        not is_nil(e(tag, :character, nil))
-      end)
-      |> filter_empty([])
-      |> Bonfire.Common.Needles.list!(skip_boundary_check: true)
-      #  |> repo().maybe_preload(:named)
-      |> debug("include_as_hashtags")
-
-    {primary_image, other_media} = Bonfire.Files.split_primary_image(e(post, :media, nil))
-    # |> debug("splitss")
-
-    %{
-      "type" => "Note",
-      #  "actor" => actor.ap_id,
-      "attributedTo" => actor.ap_id,
-      #  "to" => to,
-      #  "cc" => cc,
-      # TODO: put somewhere reusable by other types:
-      "indexable" => Bonfire.Common.Extend.module_enabled?(Bonfire.Search.Indexer, subject),
-      # TODO: put somewhere reusable by other types:
-      "sensitive" => e(post, :sensitive, :is_sensitive, false),
-      "name" => e(post, :post_content, :name, nil),
-      "summary" => e(post, :post_content, :summary, nil),
-      "content" =>
-        Text.maybe_markdown_to_html(
-          html_body,
-          # we don't want to escape HTML in local content
-          sanitize: true
-        ),
-      "source" => %{
-        "content" => html_body,
-        "mediaType" => "text/markdown"
-      },
-      "image" =>
-        maybe_apply(Bonfire.Files, :ap_publish_activity, [primary_image], fallback_return: nil),
-      "attachment" =>
-        maybe_apply(Bonfire.Files, :ap_publish_activity, [other_media], fallback_return: nil),
-      "inReplyTo" => reply_to,
-      "context" => context,
-      "tag" =>
-        Enum.map(mentions, fn actor ->
-          %{
-            "href" => actor.ap_id,
-            "name" => actor.username,
-            "type" => "Mention"
-          }
-        end) ++
-          Enum.map(hashtags, fn tag ->
-            %{
-              "href" => URIs.canonical_url(tag),
-              "name" => "##{e(tag, :name, nil) || e(tag, :named, :name, nil)}",
-              "type" => "Hashtag"
-            }
-          end)
-    }
-    |> Enum.filter(fn {_, v} -> not is_nil(v) end)
-    |> Enum.into(%{})
   end
 
   def maybe_note_to_article(object, url) do
@@ -610,7 +551,10 @@ defmodule Bonfire.Posts do
          byte_size(name) > 2 and
          String.length(content || "") > Bonfire.Social.Activities.article_char_threshold() do
       custom_summary = object["summary"]
-      summary = custom_summary || content
+
+      summary =
+        custom_summary ||
+          Text.sentence_truncate(Text.text_only(Text.maybe_markdown_to_html(content)), 500)
 
       # Create simplified preview Note with only essential fields
       preview =
@@ -618,8 +562,7 @@ defmodule Bonfire.Posts do
           "type" => "Note",
           "name" => name,
           "summary" => summary,
-          #  NOTE: should we include the full content or just a excerpt?
-          "content" => if(custom_summary, do: content)
+          "content" => content
         }
         |> Enum.filter(fn {_, v} -> not is_nil(v) end)
         |> Enum.into(%{})
@@ -642,7 +585,7 @@ defmodule Bonfire.Posts do
       # make sure we have summary where Masto expects it
       |> Map.put("summary", summary)
       # avoid duplicating the content in both fields
-      |> Map.put("content", if(custom_summary, do: content))
+      |> Map.put("content", content)
       # Add url field pointing to the object's id
       |> Map.put("url", url)
       # Add first image if any as cover image - TODO: have the user select which one?
