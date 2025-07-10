@@ -461,7 +461,7 @@ defmodule Bonfire.Posts do
 
     to =
       if is_public do
-        ["https://www.w3.org/ns/activitystreams#Public"]
+        [Bonfire.Federate.ActivityPub.AdapterUtils.public_uri()]
       else
         []
       end
