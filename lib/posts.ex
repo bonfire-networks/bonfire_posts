@@ -506,7 +506,7 @@ defmodule Bonfire.Posts do
          context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
          reply_to <-
            if(reply_to_id == thread_id, do: context) ||
-             if(reply_to_id != id, do: Threads.ap_prepare(reply_to_id)),
+             if(reply_to_id && reply_to_id != id, do: Threads.ap_prepare(reply_to_id)),
          # TODO ^ support replies and context for all object types, not just posts
          object <-
            PostContents.ap_prepare_object_note(
