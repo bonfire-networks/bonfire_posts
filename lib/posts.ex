@@ -727,8 +727,9 @@ defmodule Bonfire.Posts do
           Bonfire.Files.ap_receive_attachments(
             creator,
             attrs[:primary_image],
-            attrs[:attachments]
+            attrs[:attachments] |> debug("ap_attachments")
           )
+          |> debug("ap_receive_attachments done")
       })
 
     debug(to_circles, "to_circles")
