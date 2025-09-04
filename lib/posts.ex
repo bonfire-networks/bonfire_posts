@@ -476,10 +476,7 @@ defmodule Bonfire.Posts do
          mentions <-
            e(post, :tags, [])
            |> debug("tags")
-           #  characters except me
-           |> Enum.reject(fn tag ->
-             is_nil(e(tag, :character, nil)) or id(tag) == id(subject)
-           end)
+           |> Bonfire.Social.Tags.list_tags_mentions(subject)
            |> debug("mentions to actors")
            |> Enum.map(&ActivityPub.Actor.get_cached!(pointer: &1))
            |> filter_empty([])
