@@ -477,10 +477,10 @@ defmodule Bonfire.Posts do
            post
            |> debug("tags")
            |> Bonfire.Social.Tags.list_tags_mentions(subject)
-           |> debug("mentions to actors")
+           |> debug("list_tags_mentions")
            |> Enum.map(&ActivityPub.Actor.get_cached!(pointer: &1))
            |> filter_empty([])
-           |> debug("include_as_tags"),
+           |> debug("mentions to actors"),
          # TODO: put much of this logic somewhere reusable by objects other than Post, eg `Bonfire.Federate.ActivityPub.AdapterUtils.determine_recipients/4`
          # TODO: add a followers-only preset?
          #  (if is_public do
