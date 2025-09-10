@@ -475,12 +475,12 @@ defmodule Bonfire.Posts do
          # Note: `mentions` preset adds grants to mentioned people which should trigger the boundaries-based logic in `Adapter.external_followers_for_activity`, so should we use this only for tagging and not for addressing (if we expand the scope of that function beyond followers)?
          mentions <-
            post
-           |> flood("tags")
+           |> debug("tags")
            |> Bonfire.Social.Tags.list_tags_mentions(subject)
-           |> flood("mentions to actors")
+           |> debug("mentions to actors")
            |> Enum.map(&ActivityPub.Actor.get_cached!(pointer: &1))
            |> filter_empty([])
-           |> flood("include_as_tags"),
+           |> debug("include_as_tags"),
          # TODO: put much of this logic somewhere reusable by objects other than Post, eg `Bonfire.Federate.ActivityPub.AdapterUtils.determine_recipients/4`
          # TODO: add a followers-only preset?
          #  (if is_public do
@@ -496,9 +496,9 @@ defmodule Bonfire.Posts do
            |> Enum.map(&ActivityPub.Actor.get_cached!(pointer: &1))
            |> Enum.concat(mentions)
            |> Enums.uniq_by_id()
-           |> flood("mentions to recipients")
+           |> debug("mentions to recipients")
            |> Enum.map(& &1.ap_id)
-           |> flood("direct_recipients"),
+           |> debug("direct_recipients"),
          # end),
          context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
          reply_to <-
