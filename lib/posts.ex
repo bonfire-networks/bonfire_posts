@@ -590,7 +590,7 @@ defmodule Bonfire.Posts do
     end
   end
 
-  defp ap_create_or_update(:edit, params, object) do
+  defp ap_create_or_update(edit_verb, params, object) when edit_verb in [:edit, :update] do
     ActivityPub.update(
       params
       |> Map.merge(%{
