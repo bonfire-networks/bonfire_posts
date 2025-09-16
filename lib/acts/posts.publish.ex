@@ -21,8 +21,8 @@ defmodule Bonfire.Posts.Acts.Posts.Publish do
   alias Bonfire.Posts
   alias Ecto.Changeset
   use Arrows
+  import Untangle
   import Bonfire.Epics
-  # import Untangle
 
   # see module documentation
   @doc false
@@ -71,6 +71,7 @@ defmodule Bonfire.Posts.Acts.Posts.Publish do
         Posts.changeset(:create, attrs, current_user, boundary)
         |> Map.put(:action, :insert)
         |> maybe_overwrite_id(id)
+        |> Untangle.debug("Post changeset")
         |> Epic.assign(epic, as, ...)
         |> Work.add(:post)
     end
