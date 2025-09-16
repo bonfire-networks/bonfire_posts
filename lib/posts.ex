@@ -779,6 +779,13 @@ defmodule Bonfire.Posts do
     content = e(object, :post_content, nil) |> debug()
     activity = e(object, :activity, nil) |> debug()
 
+    sensitive =
+      Map.get(
+        if(is_map(activity), do: activity, else: %{}),
+        :sensitive,
+        Map.get(if(is_map(object), do: object, else: %{}), :sensitive, nil)
+      )
+
     replied =
       e(object, :replied, nil) || e(activity, :replied, nil) ||
         repo().maybe_preload(object, :replied) |> e(:replied, nil)
@@ -795,11 +802,12 @@ defmodule Bonfire.Posts do
         "thread_id" => e(replied, :thread_id, nil),
         "reply_to_id" => e(replied, :reply_to_id, nil)
       },
+      "sensitive" => e(sensitive, :is_sensitive, nil),
       "created" =>
         maybe_apply(Bonfire.Me.Integration, :indexing_format_created, [object],
           fallback_return: nil
         ),
-      "tags" => maybe_apply(Tags, :indexing_format_tags, activity || content, fallback_return: [])
+      "tags" => maybe_apply(Tags, :indexing_format_tags, activity || object, fallback_return: [])
     }
     |> debug()
 
