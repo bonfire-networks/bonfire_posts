@@ -515,6 +515,7 @@ defmodule Bonfire.Posts do
              context,
              reply_to
            ),
+         ap_id = object["id"] || URIs.canonical_url(post),
          params <-
            %{
              pointer: id,
@@ -527,14 +528,15 @@ defmodule Bonfire.Posts do
              to: to,
              additional: %{
                "cc" => cc
-             }
+             },
+             object:
+               (maybe_note_to_article(object, ap_id) || object)
+               |> Map.merge(%{"id" => ap_id, "to" => to, "cc" => cc})
            },
          {:ok, activity} <-
            ap_create_or_update(
              verb,
-             params,
-             (maybe_note_to_article(object, object["id"] || URIs.canonical_url(post)) || object)
-             |> Map.merge(%{"to" => to, "cc" => cc})
+             params
            ) do
       {:ok, activity}
     end
@@ -590,28 +592,16 @@ defmodule Bonfire.Posts do
     end
   end
 
-  defp ap_create_or_update(edit_verb, params, object) when edit_verb in [:edit, :update] do
+  defp ap_create_or_update(edit_verb, params) when edit_verb in [:edit, :update] do
     ActivityPub.update(
       params
-      |> Map.merge(%{
-        object:
-          Map.put_new(
-            object,
-            "updated",
-            DateTime.utc_now()
-            |> DateTime.to_iso8601()
-          )
-      })
       |> debug("params for ActivityPub / edit - Update")
     )
   end
 
-  defp ap_create_or_update(other_verb, params, object) do
+  defp ap_create_or_update(other_verb, params) do
     ActivityPub.create(
       params
-      |> Map.merge(%{
-        object: object
-      })
       |> debug("params for ActivityPub / #{inspect(other_verb)}")
     )
   end
@@ -645,8 +635,11 @@ defmodule Bonfire.Posts do
 
     #  with %{pointer_id: pointer_id} = _original_object when is_binary(pointer_id) <-
     #    ActivityPub.Object.get_activity_for_object_ap_id(post_data) do
-    with {:ok, %{pointer_id: pointer_id} = original_object} when is_binary(pointer_id) <-
+    with {:ok, %{pointer_id: pointer_id} = original_object} <-
            ActivityPub.Object.get_cached(ap_id: post_data),
+         true <-
+           is_binary(pointer_id) ||
+             error(:not_found, "No pointer_id in the object so we can't find it to update"),
          {:ok, post} <-
            e(original_object, :pointer, nil) || read(pointer_id, skip_boundary_check: true),
          {:ok, attrs, updated_post_content} <-
@@ -659,9 +652,7 @@ defmodule Bonfire.Posts do
 
       # Update metadata too: sensitive, hashtags, mentions, media
       update_post_assocs(creator, post, attrs)
-      # |> debug("post after metadata update")
-
-      {:ok, post}
+      |> debug("post after metadata update")
 
       # else
       #   e ->
@@ -825,7 +816,9 @@ defmodule Bonfire.Posts do
          {:ok, post} <-
            Bonfire.Files.maybe_update_media_assoc(creator, post, update_changeset(post), attrs) ||
              {:ok, post} do
-      {:ok, post}
+      {:ok,
+       post
+       |> repo().maybe_preload([:sensitive, :tags, :media], force: true)}
     end
   end
 
