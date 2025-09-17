@@ -806,8 +806,8 @@ defmodule Bonfire.Posts do
       "created" =>
         maybe_apply(Bonfire.Me.Integration, :indexing_format_created, [object],
           fallback_return: nil
-        ),
-      "tags" => maybe_apply(Tags, :indexing_format_tags, activity || object, fallback_return: [])
+        )
+      # "tags" => maybe_apply(Tags, :indexing_format_tags, activity || object, fallback_return: []) # NOTE: no need to index tags separately as they are in the body
     }
     |> debug()
 
