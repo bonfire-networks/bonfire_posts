@@ -459,6 +459,12 @@ defmodule Bonfire.Posts do
 
     is_public = Bonfire.Boundaries.object_public?(post)
 
+    interaction_policy =
+      Bonfire.Federate.ActivityPub.AdapterUtils.ap_prepare_outgoing_interaction_policy(
+        subject,
+        post
+      )
+
     to =
       if is_public do
         [Bonfire.Federate.ActivityPub.AdapterUtils.public_uri()]
@@ -531,7 +537,12 @@ defmodule Bonfire.Posts do
              },
              object:
                (maybe_note_to_article(object, ap_id) || object)
-               |> Map.merge(%{"id" => ap_id, "to" => to, "cc" => cc})
+               |> Map.merge(%{
+                 "id" => ap_id,
+                 "to" => to,
+                 "cc" => cc,
+                 "interactionPolicy" => interaction_policy
+               })
            },
          {:ok, activity} <-
            ap_create_or_update(
@@ -691,7 +702,9 @@ defmodule Bonfire.Posts do
     {boundary, to_circles} =
       Bonfire.Federate.ActivityPub.AdapterUtils.recipients_boundary_circles(
         direct_recipients,
-        is_public?
+        ap_activity,
+        is_public?,
+        post_data["interactionPolicy"]
       )
       |> debug("boundary & to_circles")
 
