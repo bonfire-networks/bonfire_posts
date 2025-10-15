@@ -162,7 +162,7 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     assert %{edges: replies} = Threads.list_replies(post.id, user)
 
     # debug(replies)
-    reply = List.first(replies)
+    reply = %{} = List.first(replies)
     # IO.inspect(reply)
     assert reply.reply_to_id == post.id
     assert reply.thread_id == post.id
@@ -316,6 +316,7 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
              )
 
     assert %{edges: replies} = Threads.list_replies(post.id, user)
+    assert length(replies) > 0
 
     threaded_replies = Bonfire.Social.Threads.prepare_replies_tree(replies, current_user: user)
 
@@ -340,5 +341,86 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     assert reply3.reply_to_id == post_reply.id
     assert reply3.thread_id == post.id
     assert reply3.path == [post.id, post_reply.id]
+  end
+
+  # test "debugging DB record after publishing a reply" do
+  #   attrs = %{
+  #     post_content: %{
+  #       summary: "summary",
+  #       html_body: "<p>epic html message</p>"
+  #     }
+  #   }
+
+  #   user = Fake.fake_user!()
+
+  #   assert {:ok, post} =
+  #            Posts.publish(
+  #              current_user: user,
+  #              post_attrs: attrs,
+  #              boundary: "public"
+  #            )
+
+  #   attrs_reply = %{
+  #     post_content: %{
+  #       summary: "summary",
+  #       name: "name 2",
+  #       html_body: "<p>epic html message</p>"
+  #     },
+  #     reply_to_id: post.id
+  #   }
+
+  #   assert {:ok, post_reply} =
+  #            Posts.publish(
+  #              current_user: user,
+  #              post_attrs: attrs_reply,
+  #              boundary: "public"
+  #            )
+
+  #   # # Debug: inspect DB record for the reply
+  #   # db_reply_result =
+  #   #   repo().sql("""
+  #   #     SELECT id, reply_to_id, thread_id, path
+  #   #     FROM bonfire_data_social_replied
+  #   #     WHERE id = $1
+  #   #   """, [Needle.ULID.dump!(post_reply.id)])
+
+  #   # [db_row] = db_reply_result.rows
+  #   # db_reply =
+  #   #   Enum.zip(db_reply_result.columns, db_row)
+  #   #   |> Map.new()
+
+  #   # IO.inspect(db_reply, label: "DB reply record")
+
+  #   # assert db_reply["reply_to_id"] == Needle.ULID.dump!(post.id)
+  #   # assert db_reply["thread_id"] == Needle.ULID.dump!(post.id)
+  # end
+
+  test "debug Threads.find_reply_to/2 with reply_to_id" do
+    user = Fake.fake_user!()
+
+    # Create a post to reply to
+    attrs = %{
+      post_content: %{
+        summary: "summary",
+        html_body: "<p>original post</p>"
+      }
+    }
+
+    assert {:ok, post} =
+             Posts.publish(
+               current_user: user,
+               post_attrs: attrs,
+               boundary: "public"
+             )
+
+    # Call find_reply_to with reply_to_id
+    result = Bonfire.Social.Threads.find_reply_to(%{reply_to_id: post.id}, user)
+    IO.inspect(result, label: "Threads.find_reply_to result")
+
+    # Assert it returns {:ok, reply} and reply has expected id
+    assert {:ok, reply} = result
+    assert reply.id == post.id
+    # Optionally, check if reply has a :replied field
+    # IO.inspect(reply.replied, label: "reply.replied field")
   end
 end
