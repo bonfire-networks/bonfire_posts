@@ -423,4 +423,44 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
     # Optionally, check if reply has a :replied field
     # IO.inspect(reply.replied, label: "reply.replied field")
   end
+
+  test "bonfire_data_social_replied table has expected indexes" do
+    # Check if columns exist
+    columns_result =
+      repo().sql("""
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'bonfire_data_social_replied'
+      """)
+
+    column_names =
+      Enum.map(columns_result.rows, fn [name] -> name end)
+      |> flood("Column names on bonfire_data_social_replied")
+
+    reply_to_exists? = "reply_to_id" in column_names
+    thread_id_exists? = "thread_id" in column_names
+
+    # Only check indexes if columns exist
+    if reply_to_exists? and thread_id_exists? do
+      index_result =
+        repo().sql("""
+        SELECT indexname
+        FROM pg_indexes
+        WHERE tablename = 'bonfire_data_social_replied'
+        """)
+
+      index_names =
+        Enum.map(index_result.rows, fn [name] -> name end)
+        |> flood("Index names on bonfire_data_social_replied")
+
+      assert "bonfire_data_social_replied_reply_to_id_index" in index_names
+      assert "bonfire_data_social_replied_thread_id_index" in index_names
+    else
+      flunk("""
+      Missing columns in bonfire_data_social_replied:
+      reply_to_id exists? #{reply_to_exists?}
+      thread_id exists? #{thread_id_exists?}
+      """)
+    end
+  end
 end
