@@ -435,7 +435,7 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
 
     column_names =
       Enum.map(columns_result.rows, fn [name] -> name end)
-      |> flood("Column names on bonfire_data_social_replied")
+      |> debug("Column names on bonfire_data_social_replied")
 
     reply_to_exists? = "reply_to_id" in column_names
     thread_id_exists? = "thread_id" in column_names
@@ -451,7 +451,7 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
 
       index_names =
         Enum.map(index_result.rows, fn [name] -> name end)
-        |> flood("Index names on bonfire_data_social_replied")
+        |> debug("Index names on bonfire_data_social_replied")
 
       assert "bonfire_data_social_replied_reply_to_id_index" in index_names
       assert "bonfire_data_social_replied_thread_id_index" in index_names
