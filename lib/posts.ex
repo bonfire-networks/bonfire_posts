@@ -648,6 +648,7 @@ defmodule Bonfire.Posts do
     #    ActivityPub.Object.get_activity_for_object_ap_id(post_data) do
     with {:ok, %{pointer_id: pointer_id} = original_object} <-
            ActivityPub.Object.get_cached(ap_id: post_data),
+         pointer_id = pointer_id || Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object),
          true <-
            is_binary(pointer_id) ||
              error(:not_found, "No pointer_id in the object so we can't find it to update"),
