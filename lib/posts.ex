@@ -757,6 +757,7 @@ defmodule Bonfire.Posts do
           post_attrs: attrs,
           boundary: boundary,
           to_circles: to_circles,
+          verbs_to_grant: if(!is_public?, do: Config.get([:verbs_to_grant, :message])),
           post_id: id
         )
       )
