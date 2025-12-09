@@ -70,15 +70,40 @@ defmodule Bonfire.Posts.Acts.Posts.Publish do
 
         Posts.changeset(:create, attrs, current_user, boundary)
         |> Map.put(:action, :insert)
-        |> maybe_overwrite_id(id)
+        |> maybe_overwrite_id(id, attrs)
         |> Untangle.debug("Post changeset")
         |> Epic.assign(epic, as, ...)
         |> Work.add(:post)
     end
   end
 
-  defp maybe_overwrite_id(changeset, nil), do: changeset
+  # If id is nil, check attrs for scheduled_at and generate ULID if present
+  defp maybe_overwrite_id(changeset, nil, attrs) do
+    scheduled_at =
+      Map.get(attrs, :scheduled_at)
+      |> debug("scheduled_at attrs value")
 
-  defp maybe_overwrite_id(changeset, id),
-    do: Changeset.put_change(changeset, :id, id)
+    cond do
+      is_nil(scheduled_at) or scheduled_at == "" ->
+        changeset
+
+      true ->
+        dt =
+          Bonfire.Common.DatesTimes.to_date_time(scheduled_at)
+          |> debug("converted scheduled_at to datetime")
+
+        id =
+          (dt && Bonfire.Common.DatesTimes.generate_ulid(dt))
+          |> debug("generated ulid from datetime")
+
+        if id do
+          Ecto.Changeset.put_change(changeset, :id, id)
+        else
+          changeset
+        end
+    end
+  end
+
+  defp maybe_overwrite_id(changeset, id, _attrs),
+    do: Ecto.Changeset.put_change(changeset, :id, id)
 end
