@@ -7,27 +7,29 @@ defmodule Bonfire.Posts.Fake do
   alias Common.Types
 
   def fake_post!(user, boundary \\ nil, attrs \\ nil, opts \\ []) do
-    {:ok, post} =
-      Posts.publish(
-        [
-          post_id: attrs[:id],
-          current_user: user,
-          post_attrs:
-            attrs ||
-              %{
-                post_content: %{
-                  name: title(),
-                  # summary: summary(),
-                  html_body: markdown()
-                }
-              },
-          boundary: boundary || "public",
-          debug: true,
-          crash: true
-        ] ++ List.wrap(opts)
-      )
-
-    post
+    with {:ok, post} <-
+           Posts.publish(
+             [
+               post_id: attrs[:id],
+               current_user: user,
+               post_attrs:
+                 attrs ||
+                   %{
+                     post_content: %{
+                       name: title(),
+                       # summary: summary(),
+                       html_body: markdown()
+                     }
+                   },
+               boundary: boundary || "public",
+               debug: true,
+               crash: true
+             ] ++ List.wrap(opts)
+           ) do
+      post
+    else
+      err -> raise "Failed to create fake post: #{inspect(err)}"
+    end
   end
 
   def fake_comment!(user, reply_to, boundary \\ nil, attrs \\ nil) do

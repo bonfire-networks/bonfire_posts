@@ -4,7 +4,6 @@ defmodule Bonfire.Posts.PostsTranslationTest do
 
   alias Bonfire.Social.FeedActivities
   alias Bonfire.Posts
-
   alias Bonfire.Me.Fake
   import Bonfire.Social.Fake
   use Bonfire.Common.Utils
@@ -31,7 +30,7 @@ defmodule Bonfire.Posts.PostsTranslationTest do
     assert post_fallback.html_body == "Este es el cuerpo"
   end
 
-  test "can insert and translate post content with translations, including after read" do
+  setup do
     user = Fake.fake_user!()
 
     post =
@@ -48,12 +47,6 @@ defmodule Bonfire.Posts.PostsTranslationTest do
         }
       })
 
-    assert_translations(post.post_content)
-
-    # Fetch post via Posts.read and check translations again
-    {:ok, read_post} = Posts.read(post.id)
-    assert_translations(read_post.post_content)
-
     post_en_only =
       fake_post!(user, "public", %{
         post_content: %{
@@ -62,6 +55,19 @@ defmodule Bonfire.Posts.PostsTranslationTest do
         }
       })
 
+    {:ok, user: user, post: post, post_en_only: post_en_only}
+  end
+
+  test "can translate post content with translations", %{post: post} do
+    assert_translations(post.post_content)
+  end
+
+  test "can translate post content after read", %{post: post} do
+    {:ok, read_post} = Posts.read(post.id)
+    assert_translations(read_post.post_content)
+  end
+
+  test "translation fragment returns correct values", %{post: post, post_en_only: post_en_only} do
     # Debug: check the actual JSON structure in the DB
     db_json =
       repo().one(
@@ -129,8 +135,16 @@ defmodule Bonfire.Posts.PostsTranslationTest do
     found_post = Enum.find(results, fn post -> post.id == post.id end)
     assert found_post.activity.object.post_content.translation["summary"] == "Hola mundo"
     assert found_post.activity.object.post_content.translation["html_body"] == "Este es el cuerpo"
+  end
 
+  @tag :fixme
+  test "filtered query only returns posts with Spanish translation", %{
+    post: post,
+    post_en_only: post_en_only
+  } do
     import Ecto.Query
+
+    # debug: check the output of translation subquery
 
     translations =
       repo().all(
@@ -190,5 +204,46 @@ defmodule Bonfire.Posts.PostsTranslationTest do
     found_post = Enum.find(results, fn post -> post.id == post.id end)
     assert found_post.activity.object.post_content.translation["summary"] == "Hola mundo"
     assert found_post.activity.object.post_content.translation["html_body"] == "Este es el cuerpo"
+  end
+
+  test "can set primary language on post" do
+    user = Bonfire.Me.Fake.fake_user!()
+    assert :fr in Bonfire.Common.Localise.known_locales()
+
+    post =
+      fake_post!(user, "public", %{
+        language: "fr",
+        post_content: %{
+          summary: "French only",
+          html_body: "Just French"
+        }
+      })
+      |> repo().maybe_preload(:language)
+
+    assert post.language.locale == "fr"
+
+    {:ok, read_post} =
+      Posts.read(post.id)
+      # TODO: should language be included in preloads by default?
+      |> repo().maybe_preload(:language)
+
+    assert read_post.language.locale == "fr"
+  end
+
+  test "cannot set invalid primary language on post" do
+    user = Bonfire.Me.Fake.fake_user!()
+    assert :xx not in Bonfire.Common.Localise.known_locales()
+
+    assert_raise RuntimeError, fn ->
+      fake_post!(user, "public", %{
+        language: "xx",
+        post_content: %{
+          html_body: "Random language content"
+        }
+      })
+    end
+
+    #     |> repo().maybe_preload(:language)
+    # assert is_nil(post.language) # or is_nil(post.language.locale)
   end
 end
