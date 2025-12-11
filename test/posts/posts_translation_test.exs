@@ -75,7 +75,7 @@ defmodule Bonfire.Posts.PostsTranslationTest do
           where: pc.id == ^post.id,
           select: fragment("row_to_json(?)", pc)
       )
-      |> flood("DB post_content JSON")
+      |> debug("DB post_content JSON")
 
     # Debug: check the output of translate_field directly in SQL
     translated_summary =
@@ -92,7 +92,7 @@ defmodule Bonfire.Posts.PostsTranslationTest do
               ^["es"]
             )
       )
-      |> flood("translate_field summary :es")
+      |> debug("translate_field summary :es")
 
     db_json_en_only =
       repo().one(
@@ -100,7 +100,7 @@ defmodule Bonfire.Posts.PostsTranslationTest do
           where: pc.id == ^post.id,
           select: fragment("row_to_json(?)", pc)
       )
-      |> flood("DB post_content JSON")
+      |> debug("DB post_content JSON")
 
     translated_summary_en_only =
       repo().one(
@@ -116,7 +116,7 @@ defmodule Bonfire.Posts.PostsTranslationTest do
               ^["es"]
             )
       )
-      |> flood("translate_field summary :es ")
+      |> debug("translate_field summary :es ")
 
     import Ecto.Query
 
@@ -125,11 +125,11 @@ defmodule Bonfire.Posts.PostsTranslationTest do
       Bonfire.Data.Social.Post
       |> where([p], p.id == ^post.id)
       |> Bonfire.Social.Objects.select_preferred_language(:es)
-      |> flood("Query in preferred language :es query")
+      |> debug("Query in preferred language :es query")
 
     results =
       repo().all(query)
-      |> flood("Posts in preferred language :es")
+      |> debug("Posts in preferred language :es")
 
     # The fields should be translated
     found_post = Enum.find(results, fn post -> post.id == post.id end)
@@ -158,7 +158,7 @@ defmodule Bonfire.Posts.PostsTranslationTest do
                ^["es"]
              )}
       )
-      |> flood("Translation subquery output for :es")
+      |> debug("Translation subquery output for :es")
 
     q = """
     DO $$
@@ -189,12 +189,12 @@ defmodule Bonfire.Posts.PostsTranslationTest do
     query =
       Bonfire.Data.Social.Post
       |> Bonfire.Social.Objects.maybe_filter({:preferred_language, [:es]}, [])
-      |> flood("Query filtered for preferred language :es query")
+      |> debug("Query filtered for preferred language :es query")
       |> repo().print_sql()
 
     results =
       repo().all(query)
-      |> flood("Posts filtered for preferred language :es")
+      |> debug("Posts filtered for preferred language :es")
 
     # Only the post with Spanish translation should be returned
     assert Enum.any?(results, fn post -> post.id == post.id end)
