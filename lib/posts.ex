@@ -646,22 +646,17 @@ defmodule Bonfire.Posts do
 
     #  with %{pointer_id: pointer_id} = _original_object when is_binary(pointer_id) <-
     #    ActivityPub.Object.get_activity_for_object_ap_id(post_data) do
-    with {:ok, %{pointer_id: pointer_id} = original_object} <-
-           ActivityPub.Object.get_cached(ap_id: post_data),
-         pointer_id = pointer_id || Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object),
+    with {:ok, original_pointer, pointer_id} <- get_pointer_to_update(ap_object),
          true <-
            is_binary(pointer_id) ||
              error(:not_found, "No pointer_id in the object so we can't find it to update"),
-         {:ok, post} <-
-           e(original_object, :pointer, nil) || read(pointer_id, skip_boundary_check: true),
+         {:ok, post} <- original_pointer || read(pointer_id, skip_boundary_check: true),
          {:ok, attrs, updated_post_content} <-
            PostContents.ap_receive_update(creator, activity_data, post_data, pointer_id),
          post =
            post
            |> Map.put(:post_content, updated_post_content)
            |> repo().maybe_preload([:sensitive, :tags, :media]) do
-      # debug(pointer_id, "original_object")
-
       # Update metadata too: sensitive, hashtags, mentions, media
       update_post_assocs(creator, post, attrs)
       |> debug("post after metadata update")
@@ -669,6 +664,30 @@ defmodule Bonfire.Posts do
       # else
       #   e ->
       #     error(e, "Could not find the object being updated.")
+    end
+  end
+
+  defp get_pointer_to_update(ap_object) do
+    post_data = e(ap_object, :data, %{})
+
+    with {:ok, %{pointer_id: pointer_id} = original_object} <-
+           ActivityPub.Object.get_cached(ap_id: post_data),
+         original_pointer = e(original_object, :pointer, nil),
+         pointer_id =
+           pointer_id || Enums.id(original_pointer) ||
+             Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object) do
+      {:ok, original_pointer, pointer_id}
+    else
+      {:error, :not_found} ->
+        if pointer_id = Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object) do
+          {:ok, nil, pointer_id}
+        else
+          error(ap_object, "Could not find the object being updated.")
+          {:error, :not_found}
+        end
+
+      e ->
+        error(e, "Error while looking for the object being updated.")
     end
   end
 
