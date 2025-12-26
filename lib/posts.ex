@@ -613,8 +613,9 @@ defmodule Bonfire.Posts do
   defp ap_create_or_update(other_verb, params) do
     ActivityPub.create(
       params
-      |> debug("params for ActivityPub / #{inspect(other_verb)}")
+      |> flood("params for ActivityPub / #{inspect(other_verb)}")
     )
+    |> flood("result of ActivityPub / #{inspect(other_verb)}")
   end
 
   @doc """

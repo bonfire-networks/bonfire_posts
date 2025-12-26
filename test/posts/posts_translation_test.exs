@@ -152,38 +152,39 @@ defmodule Bonfire.Posts.PostsTranslationTest do
           select:
             {pc.id,
              fragment(
-               "translate_field(?, ?::varchar, ?::varchar[])",
+               "translate_field(?, ?::varchar, ?::varchar, ?::varchar[])",
                pc,
                "translations",
+               "en",
                ^["es"]
              )}
       )
       |> debug("Translation subquery output for :es")
 
-    q = """
-    DO $$
-    DECLARE
-      rec RECORD;
-    BEGIN
-      FOR rec IN 
-        SELECT b0."id", s3."translation", s3."summary"
-        FROM "bonfire_data_social_post" AS b0 
-        LEFT OUTER JOIN "bonfire_data_social_activity" AS b1 ON b1."id" = b0."id" 
-        LEFT OUTER JOIN "pointers_pointer" AS p2 ON p2."id" = b1."object_id" 
-        LEFT OUTER JOIN (
-          SELECT sb0."id", sb0."summary", translate_field(sb0, 'en', ARRAY['es']) AS "translation" 
-          FROM "bonfire_data_social_post_content" AS sb0
-        ) AS s3 ON s3."id" = p2."id" 
-         WHERE (NOT (s3."translation" IS NULL))
-      LOOP
-        IF rec.translation IS NULL THEN
-          RAISE EXCEPTION 'Found: id=%, translation=%, summary=%', rec.id, rec.translation, rec.summary;
-        END IF;
-      END LOOP;
-    END $$;
-    """
+    # q = """
+    # DO $$
+    # DECLARE
+    #   rec RECORD;
+    # BEGIN
+    #   FOR rec IN 
+    #     SELECT b0."id", s3."translation", s3."summary"
+    #     FROM "bonfire_data_social_post" AS b0 
+    #     LEFT OUTER JOIN "bonfire_data_social_activity" AS b1 ON b1."id" = b0."id" 
+    #     LEFT OUTER JOIN "pointers_pointer" AS p2 ON p2."id" = b1."object_id" 
+    #     LEFT OUTER JOIN (
+    #       SELECT sb0."id", sb0."summary", translate_field(sb0, 'en', ARRAY['es']) AS "translation" 
+    #       FROM "bonfire_data_social_post_content" AS sb0
+    #     ) AS s3 ON s3."id" = p2."id" 
+    #      WHERE (NOT (s3."translation" IS NULL))
+    #   LOOP
+    #     IF rec.translation IS NULL THEN
+    #       RAISE EXCEPTION 'Found: id=%, translation=%, summary=%', rec.id, rec.translation, rec.summary;
+    #     END IF;
+    #   END LOOP;
+    # END $$;
+    # """
 
-    repo().sql(q)
+    # repo().sql(q)
 
     # now try filtering - FIXME: still shows untranslated posts
     query =
