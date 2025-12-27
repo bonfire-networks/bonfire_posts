@@ -842,6 +842,56 @@ defmodule Bonfire.Posts do
 
   def count_total(), do: repo().one(select(Post, [u], count(u.id)))
 
+  defp query_for_creator(user_ids) do
+    from(c in Bonfire.Data.Social.Created,
+      join: p in Bonfire.Data.Social.Post,
+      on: c.id == p.id,
+      where: c.creator_id in ^List.wrap(user_ids),
+      group_by: c.creator_id
+    )
+  end
+
+  def count_for_users(users) when is_list(users) do
+    user_ids =
+      users
+      |> Types.uids()
+      |> Enum.uniq()
+
+    if user_ids == [] do
+      %{}
+    else
+      user_ids
+      |> query_for_creator()
+      |> select([c], {c.creator_id, count(c.id)})
+      |> repo().all()
+      |> Map.new()
+    end
+  end
+
+  def count_for_users(_), do: %{}
+
+  @doc """
+  Count posts created by a single user.
+
+  Returns the number of posts as an integer, or nil if the user has no posts.
+
+  ## Examples
+
+      iex> count_for_user(user_id)
+      42
+
+      iex> count_for_user(nonexistent_user)
+      nil
+  """
+  def count_for_user(user) do
+    if user_id = Types.uid(user) do
+      user_id
+      |> query_for_creator()
+      |> select([c], count(c.id))
+      |> repo().one()
+    end
+  end
+
   # Helper function to update post metadata during Update activities
   # Reuses existing module functions to keep it DRY
   defp update_post_assocs(creator, %{id: pointer_id} = post, attrs) do
