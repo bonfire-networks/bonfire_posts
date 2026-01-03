@@ -652,15 +652,18 @@ defmodule Bonfire.Posts do
            is_binary(pointer_id) ||
              error(:not_found, "No pointer_id in the object so we can't find it to update"),
          {:ok, post} <- original_pointer || read(pointer_id, skip_boundary_check: true),
+         _ = debug(post, "post before update"),
          {:ok, attrs, updated_post_content} <-
            PostContents.ap_receive_update(creator, activity_data, post_data, pointer_id),
+         _ = debug(attrs, "attrs from ap_receive_update"),
+         _ = debug(updated_post_content, "updated_post_content from ap_receive_update"),
          post =
            post
-           |> Map.put(:post_content, updated_post_content)
-           |> repo().maybe_preload([:sensitive, :tags, :media]) do
+           |> Map.put(:post_content, updated_post_content) do
       # Update metadata too: sensitive, hashtags, mentions, media
+
       update_post_assocs(creator, post, attrs)
-      |> debug("post after metadata update")
+      |> debug("result from update_post_assocs")
 
       # else
       #   e ->
@@ -893,8 +896,12 @@ defmodule Bonfire.Posts do
   end
 
   # Helper function to update post metadata during Update activities
-  # Reuses existing module functions to keep it DRY
-  defp update_post_assocs(creator, %{id: pointer_id} = post, attrs) do
+  defp update_post_assocs(creator, %{id: _pointer_id} = post, attrs) do
+    post =
+      post
+      |> repo().maybe_preload([:sensitive, :tags, :media])
+      |> debug("post with old assocs preloaded")
+
     with {:ok, post} <- Objects.set_sensitivity(post, attrs[:sensitive]) || {:ok, post},
          {:ok, post} <- Bonfire.Tag.maybe_update_tags(creator, post, attrs) || {:ok, post},
          post = repo().preload(post, :files),
