@@ -253,7 +253,7 @@ defmodule Bonfire.Posts do
     |> Objects.read(
       opts
       |> Keyword.put(:skip_boundary_check, true)
-      # ^ avoid checking boundary twice
+      # ^ to avoid checking boundary twice
     )
   end
 
@@ -277,7 +277,7 @@ defmodule Bonfire.Posts do
   def list_by(by_user, opts \\ []) do
     # query FeedPublish
     # [posts_by: {by_user, &filter/3}]
-    Objects.maybe_filter(query_base(), {:creators, by_user})
+    Objects.maybe_filter(query_base(opts), {:creators, by_user})
     |> list_paginated(to_options(opts) ++ [subject_user: by_user])
   end
 
@@ -327,7 +327,7 @@ defmodule Bonfire.Posts do
   """
   def query_paginated(filters, opts \\ [])
 
-  def query_paginated([], opts), do: query_paginated(query_base(), opts)
+  def query_paginated([], opts), do: query_paginated(query_base(opts), opts)
 
   def query_paginated(filters, opts)
       when is_list(filters) or is_struct(filters) do
@@ -362,13 +362,14 @@ defmodule Bonfire.Posts do
   def query(filters \\ [], opts \\ nil)
 
   def query(filters, opts) when is_list(filters) or is_tuple(filters) do
-    query_base()
+    query_base(opts)
     |> query_filter(filters, nil, nil)
     |> boundarise(main_object.id, opts)
   end
 
-  defp query_base do
+  defp query_base(opts) do
     from(main_object in Post, as: :main_object)
+    |> repo().maybe_filter_out_future_ulids(opts)
     |> proload([:post_content])
   end
 

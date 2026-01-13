@@ -40,10 +40,17 @@ defmodule Bonfire.Posts.ScheduledPostsTest do
     ids = Enum.map(posts, & &1.id)
     refute post.id in ids
 
-    # can still read it if we know the id
-    assert {:ok, _} =
+    # cannot read it 
+    assert {:error, :not_found} =
              Posts.read(post.id,
                current_user: user
+             )
+
+    # can fetch it if we really want to
+    assert {:ok, _} =
+             Posts.read(post.id,
+               current_user: user,
+               include_scheduled: true
              )
 
     # Check Oban jobs for federation are scheduled for the future
