@@ -757,9 +757,10 @@ defmodule Bonfire.Posts do
           )
           |> debug("ap_receive_attachments done")
       })
+      |> debug("attrs for incoming post creation")
 
-    debug(to_circles, "to_circles")
-    debug(reply_to_id, "reply_to_id")
+    # debug(to_circles, "to_circles")
+    # debug(reply_to_id, "reply_to_id")
 
     if !is_public? and not Enum.empty?(to_circles || []) and
          (!reply_to_id or
@@ -769,7 +770,7 @@ defmodule Bonfire.Posts do
             )
             |> debug("replying_to_type") ==
               Bonfire.Data.Social.Message) do
-      info("treat as Message if private with @ mentions that isn't a reply to a non-DM")
+      debug("treat as Message if private with @ mentions that isn't a reply to a non-DM")
       maybe_apply(Bonfire.Messages, :send, [creator, attrs])
     else
       info(is_public?, "treat as Post - public?")
@@ -784,6 +785,7 @@ defmodule Bonfire.Posts do
           verbs_to_grant: if(!is_public?, do: Config.get([:verbs_to_grant, :message])),
           post_id: id
         )
+        |> debug("opts for incoming post epic")
       )
     end
   end
