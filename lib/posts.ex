@@ -505,7 +505,7 @@ defmodule Bonfire.Posts do
            |> Enums.uniq_by_id()
            |> debug("mentions to recipients")
            |> Enum.map(& &1.ap_id)
-           |> flood("direct_recipients"),
+           |> debug("direct_recipients"),
          # end),
          context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
          reply_to <-
@@ -607,16 +607,16 @@ defmodule Bonfire.Posts do
   defp ap_create_or_update(edit_verb, params) when edit_verb in [:edit, :update] do
     ActivityPub.update(
       params
-      |> flood("params for ActivityPub / edit - Update")
+      |> debug("params for ActivityPub / edit - Update")
     )
   end
 
   defp ap_create_or_update(other_verb, params) do
     ActivityPub.create(
       params
-      |> flood("params for ActivityPub / #{inspect(other_verb)}")
+      |> debug("params for ActivityPub / #{inspect(other_verb)}")
     )
-    |> flood("result of ActivityPub / #{inspect(other_verb)}")
+    |> debug("result of ActivityPub / #{inspect(other_verb)}")
   end
 
   @doc """
@@ -717,14 +717,14 @@ defmodule Bonfire.Posts do
 
     is_public? =
       Bonfire.Federate.ActivityPub.AdapterUtils.is_public?(ap_activity, ap_object)
-      |> flood("is_public?")
+      |> debug("is_public?")
 
     direct_recipients =
       Bonfire.Federate.ActivityPub.AdapterUtils.all_known_recipient_characters(
         activity_data,
         post_data
       )
-      |> flood("direct_recipients")
+      |> debug("direct_recipients")
 
     {boundary, to_circles} =
       Bonfire.Federate.ActivityPub.AdapterUtils.recipients_boundary_circles(
@@ -733,7 +733,7 @@ defmodule Bonfire.Posts do
         is_public?,
         post_data["interactionPolicy"]
       )
-      |> flood("boundary & to_circles")
+      |> debug("boundary & to_circles")
 
     attrs =
       PostContents.ap_receive_attrs_prepare(
