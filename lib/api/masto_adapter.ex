@@ -15,23 +15,29 @@ defmodule Bonfire.Posts.API.MastoAdapter do
     if is_nil(current_user) do
       RestAdapter.error_fn({:error, :unauthorized}, conn)
     else
-      case publish_from_masto_params(params, current_user) do
-        {:ok, post} ->
-          post =
-            post
-            |> repo().maybe_preload([
-              :post_content,
-              :media,
-              :replied,
-              activity: [:subject]
-            ])
+      try do
+        case publish_from_masto_params(params, current_user) do
+          {:ok, post} ->
+            post =
+              post
+              |> repo().maybe_preload([
+                :post_content,
+                :media,
+                :replied,
+                activity: [:subject]
+              ])
 
-          status = Mappers.Status.from_post(post, current_user: current_user)
-          RestAdapter.json(conn, status)
+            status = Mappers.Status.from_post(post, current_user: current_user)
+            RestAdapter.json(conn, status)
 
-        {:error, reason} ->
-          error(reason, "Failed to create status")
-          RestAdapter.error_fn({:error, reason}, conn)
+          {:error, reason} ->
+            error(reason, "Failed to create status")
+            RestAdapter.error_fn({:error, reason}, conn)
+        end
+      rescue
+        e ->
+          error(e, "Failed to create status")
+          RestAdapter.error_fn({:error, e}, conn)
       end
     end
   end
@@ -90,7 +96,7 @@ defmodule Bonfire.Posts.API.MastoAdapter do
   defp fetch_media_by_ids(media_ids) when is_list(media_ids) do
     media_ids
     |> Enum.map(fn id ->
-      case Bonfire.Files.Media.get(id) do
+      case Bonfire.Files.Media.one(id: id) do
         {:ok, media} -> media
         _ -> nil
       end
@@ -101,6 +107,12 @@ defmodule Bonfire.Posts.API.MastoAdapter do
   defp fetch_media_by_ids(media_id) when is_binary(media_id) do
     fetch_media_by_ids([media_id])
   end
+
+  defp fetch_media_by_ids(media_ids) when is_map(media_ids) do
+    fetch_media_by_ids(Map.values(media_ids))
+  end
+
+  defp fetch_media_by_ids(_other), do: []
 
   defp maybe_add_sensitive(opts, sensitive) when sensitive in [true, "true", "1"] do
     Keyword.put(opts, :sensitive, true)
