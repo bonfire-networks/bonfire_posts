@@ -44,8 +44,8 @@ defmodule Bonfire.Posts.API.MastoAdapter do
 
   defp publish_from_masto_params(params, current_user) do
     with {:ok, post_attrs} <- build_post_attrs(params),
-         boundary <- visibility_to_boundary(params["visibility"]),
-         opts <- build_publish_opts(params, current_user, boundary, post_attrs),
+         {boundary, extra_circles} <- visibility_to_boundary(params["visibility"]),
+         opts <- build_publish_opts(params, current_user, boundary, extra_circles, post_attrs),
          {:ok, post} <- Bonfire.Posts.publish(opts) do
       {:ok, post}
     end
@@ -70,25 +70,21 @@ defmodule Bonfire.Posts.API.MastoAdapter do
     end
   end
 
-  defp build_publish_opts(params, current_user, boundary, post_attrs) do
+  defp build_publish_opts(params, current_user, boundary, extra_circles, post_attrs) do
     [
       current_user: current_user,
       post_attrs: post_attrs,
-      boundary: boundary
+      boundary: boundary,
+      to_circles: extra_circles
     ]
     |> maybe_add_sensitive(params["sensitive"])
   end
 
-  defp visibility_to_boundary("public"), do: "public"
-
-  defp visibility_to_boundary("unlisted") do
-    debug("unlisted visibility not yet implemented, treating as public")
-    "public"
-  end
-
-  defp visibility_to_boundary("private"), do: "followers"
-  defp visibility_to_boundary("direct"), do: "mentions"
-  defp visibility_to_boundary(_), do: "public"
+  defp visibility_to_boundary("public"), do: {"public", []}
+  defp visibility_to_boundary("unlisted"), do: {"unlisted", []}
+  defp visibility_to_boundary("private"), do: {"mentions", [{:followers, nil}]}
+  defp visibility_to_boundary("direct"), do: {"mentions", []}
+  defp visibility_to_boundary(_), do: {"public", []}
 
   defp fetch_media_by_ids(nil), do: []
   defp fetch_media_by_ids([]), do: []
