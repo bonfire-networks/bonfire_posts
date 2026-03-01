@@ -159,7 +159,7 @@ defmodule Bonfire.Posts.PostsTranslationTest do
                ^["es"]
              )}
       )
-      |> flood("Translation subquery output for :es")
+      |> debug("Translation subquery output for :es")
 
     # q = """
     # DO $$
@@ -190,12 +190,12 @@ defmodule Bonfire.Posts.PostsTranslationTest do
     query =
       Bonfire.Data.Social.Post
       |> Bonfire.Social.Objects.maybe_filter({:preferred_language, [:es]}, [])
-      |> flood("Query filtered for preferred language :es query")
+      |> debug("Query filtered for preferred language :es query")
       |> repo().print_sql()
 
     results =
       repo().all(query)
-      |> flood("Posts filtered for preferred language :es")
+      |> debug("Posts filtered for preferred language :es")
 
     # Only the post with Spanish translation should be returned
     assert Enum.any?(results, fn %{id: id} -> id == post.id end)
