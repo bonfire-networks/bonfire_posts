@@ -137,7 +137,6 @@ defmodule Bonfire.Posts.PostsTranslationTest do
     assert found_post.activity.object.post_content.translation["html_body"] == "Este es el cuerpo"
   end
 
-  @tag :fixme
   test "filtered query only returns posts with Spanish translation", %{
     post: post,
     post_en_only: post_en_only
