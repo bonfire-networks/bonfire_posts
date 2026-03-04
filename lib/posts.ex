@@ -423,7 +423,7 @@ defmodule Bonfire.Posts do
       {:ok, %ActivityPub.Activity{}}
   """
   # TODO: federated delete, in addition to create:
-  def ap_publish_activity(subject, verb, post) do
+  def ap_publish_activity(subject, verb, post, opts \\ []) do
     id = uid!(post)
 
     post =
@@ -505,6 +505,9 @@ defmodule Bonfire.Posts do
            |> Enums.uniq_by_id()
            |> debug("mentions to recipients")
            |> Enum.map(& &1.ap_id)
+           # FEP-044f: include extra cc recipients (e.g. quoted author for Update after acceptance)
+           |> Enum.concat(List.wrap(opts[:cc]))
+           |> Enum.uniq()
            |> debug("direct_recipients"),
          # end),
          context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
