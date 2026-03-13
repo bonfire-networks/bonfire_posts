@@ -563,7 +563,7 @@ defmodule Bonfire.Posts do
 
     if is_binary(name) and
          byte_size(name) > 2 and
-         String.length(content || "") > Bonfire.Social.Activities.article_char_threshold() do
+         String.length(content || "") > Bonfire.Posts.Integration.article_char_threshold() do
       custom_summary = object["summary"]
 
       summary =
@@ -904,6 +904,7 @@ defmodule Bonfire.Posts do
   end
 
   # Helper function to update post metadata during Update activities
+  # TODO: move somewhere reusable by other extensions
   defp update_post_assocs(creator, %{id: _pointer_id} = post, attrs) do
     post =
       post

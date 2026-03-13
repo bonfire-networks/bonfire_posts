@@ -14,4 +14,6 @@ defmodule Bonfire.Posts.Integration do
   def repo, do: Config.repo()
 
   def mailer, do: Config.get!(:mailer_module)
+
+  def article_char_threshold, do: Config.get([:bonfire_posts, :article_char_threshold], 888)
 end
