@@ -211,19 +211,24 @@ defmodule Bonfire.Posts do
     Post.changeset(%Post{}, attrs)
   end
 
-  def prepare_post_attrs(attrs) do
+  def prepare_post_attrs(attrs, opts \\ []) do
     # FIXME: find a less nasty way (this is to support graceful degradation with the textarea inside noscript)
+    body =
+      e(attrs, :html_body, nil) || e(attrs, :post, :post_content, :html_body, nil) ||
+        e(attrs, :fallback_post, :post_content, :html_body, nil)
+
+    body =
+      case opts[:append_url] do
+        url when is_binary(url) and url != "" ->
+          String.trim_trailing(body || "") <> "\n\n" <> url
+
+        _ ->
+          body
+      end
+
     attrs
     |> debug("pre")
-    |> deep_merge(%{
-      post: %{
-        post_content: %{
-          html_body:
-            e(attrs, :html_body, nil) || e(attrs, :post, :post_content, :html_body, nil) ||
-              e(attrs, :fallback_post, :post_content, :html_body, nil)
-        }
-      }
-    })
+    |> deep_merge(%{post: %{post_content: %{html_body: body}}})
   end
 
   @doc """
