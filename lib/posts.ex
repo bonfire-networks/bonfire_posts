@@ -402,7 +402,7 @@ defmodule Bonfire.Posts do
       [search, Post, opts],
       &none/2
     ) ||
-      search_query(search, opts) |> Social.many(opts[:paginate?], opts)
+      search_query(search, opts) |> repo().many_maybe_paginated(opts[:paginate?], opts)
   end
 
   defp none(_, _), do: nil
