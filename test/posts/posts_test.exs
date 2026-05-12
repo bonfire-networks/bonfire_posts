@@ -167,4 +167,34 @@ defmodule Bonfire.Posts.PostsTest do
     refute Bonfire.Social.FeedLoader.feed_contains?(:notifications, post, current_user: user)
     # refute Bonfire.Social.FeedLoader.feed_contains?(:inbox, post, current_user: user)
   end
+
+  describe "publish with uploaded_media URL attachment" do
+    test "attaches a remote URL as a Media record without downloading" do
+      user = Fake.fake_user!()
+      url = "https://example.com/feature.jpg"
+
+      assert {:ok, post} =
+               Posts.publish(
+                 current_user: user,
+                 boundary: "public",
+                 post_attrs: %{
+                   post_content: %{name: "With image", html_body: "body"},
+                   uploaded_media: [
+                     %{
+                       "href" => url,
+                       "label" => "A caption",
+                       "alt" => "Alt text",
+                       "primary_image" => true
+                     }
+                   ]
+                 }
+               )
+
+      post = repo().preload(post, files: :media)
+      assert [%{media: media}] = post.files
+      assert media.path == url
+      assert media.metadata["label"] == "A caption"
+      assert media.metadata["alt"] == "Alt text"
+    end
+  end
 end
