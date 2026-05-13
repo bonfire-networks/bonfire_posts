@@ -226,8 +226,9 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
 
     # debug(replies)
     assert length(replies) == 2
-    reply = List.last(replies)
-    reply3 = List.first(replies)
+
+    reply = Enum.find(replies, &(&1.reply_to_id == post.id))
+    reply3 = Enum.find(replies, &(&1.reply_to_id == post_reply.id))
 
     assert reply.reply_to_id == post.id
     assert reply.thread_id == post.id

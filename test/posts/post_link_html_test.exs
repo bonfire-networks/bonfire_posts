@@ -34,7 +34,7 @@ defmodule Bonfire.Posts.PostLinkHTMLTest do
       )
 
     assert post.post_content.html_body ==
-             "epic html with a link <a href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a>"
+             "epic html with a link <a rel=\"nofollow noopener ugc\" href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a>"
 
     post =
       fake_post!(
@@ -49,7 +49,7 @@ defmodule Bonfire.Posts.PostLinkHTMLTest do
       )
 
     assert post.post_content.html_body ==
-             "<a href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a> epic html with a link"
+             "<a rel=\"nofollow noopener ugc\" href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a> epic html with a link"
 
     post =
       fake_post!(
@@ -64,7 +64,7 @@ defmodule Bonfire.Posts.PostLinkHTMLTest do
       )
 
     assert post.post_content.html_body =~
-             "<a href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a>"
+             "<a rel=\"nofollow noopener ugc\" href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a>\nepic html with a link"
 
     post =
       fake_post!(
@@ -79,7 +79,7 @@ defmodule Bonfire.Posts.PostLinkHTMLTest do
       )
 
     assert post.post_content.html_body ==
-             "<a href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a>"
+             "<a rel=\"nofollow noopener ugc\" href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a>"
 
     post =
       fake_post!(
@@ -95,6 +95,6 @@ defmodule Bonfire.Posts.PostLinkHTMLTest do
       )
 
     assert post.post_content.html_body =~
-             "<a href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a>"
+             "<a rel=\"nofollow noopener ugc\" href=\"https://developer.mozilla.org/en-US/docs/Web/API/\">developer.mozilla.org/en-US/...</a>"
   end
 end
