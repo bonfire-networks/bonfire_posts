@@ -188,9 +188,10 @@ defmodule Bonfire.Posts.MentionsTest do
     assert Bonfire.Social.FeedLoader.feed_contains?(:my, mention, current_user: mentioned)
   end
 
-  test "mentioning someone DOES NOT appear (if NOT using the preset 'mentions' boundary) in their instance feed" do
+  test "mentioning someone with 'mentions' boundary does not appear in a 3rd party's instance feed" do
     me = Fake.fake_user!()
     mentioned = Fake.fake_user!()
+    third = Fake.fake_user!()
 
     attrs = %{
       post_content: %{
@@ -198,8 +199,10 @@ defmodule Bonfire.Posts.MentionsTest do
       }
     }
 
-    assert {:ok, mention} = Posts.publish(current_user: me, post_attrs: attrs)
-    refute Bonfire.Social.FeedLoader.feed_contains?(:local, mention, current_user: mentioned)
+    assert {:ok, mention} =
+             Posts.publish(current_user: me, boundary: "mentions", post_attrs: attrs)
+
+    refute Bonfire.Social.FeedLoader.feed_contains?(:local, mention, current_user: third)
   end
 
   test "mentioning someone appears in my instance feed (if using 'local' preset)" do
