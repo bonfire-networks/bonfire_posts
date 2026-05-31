@@ -57,7 +57,7 @@ defmodule Bonfire.Posts.API.MastoAdapter do
     with {:ok, media} <-
            fetch_media_by_ids(params["media_ids"] || params["media_ids[]"] || [], current_user) do
       if status_text == "" and media == [] do
-        {:error, "Validation failed: Text can't be blank"}
+        {:error, {:unprocessable_entity, "Text can't be blank"}}
       else
         {:ok,
          %{
