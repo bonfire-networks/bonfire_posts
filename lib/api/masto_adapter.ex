@@ -27,7 +27,12 @@ defmodule Bonfire.Posts.API.MastoAdapter do
                 activity: [:subject]
               ])
 
-            status = Mappers.Status.from_post(post, current_user: current_user)
+            status =
+              Mappers.Status.from_post(post,
+                current_user: current_user,
+                context_id: params["context_id"]
+              )
+
             RestAdapter.json(conn, status)
 
           {:error, reason} ->
@@ -44,8 +49,7 @@ defmodule Bonfire.Posts.API.MastoAdapter do
 
   defp publish_from_masto_params(params, current_user) do
     with {:ok, post_attrs} <- build_post_attrs(params, current_user),
-         {boundary, extra_circles} <- visibility_to_boundary(params["visibility"]),
-         opts <- build_publish_opts(params, current_user, boundary, extra_circles, post_attrs),
+         opts <- build_publish_opts(params, current_user, post_attrs),
          {:ok, post} <- Bonfire.Posts.publish(opts) do
       {:ok, post}
     end
@@ -115,15 +119,53 @@ defmodule Bonfire.Posts.API.MastoAdapter do
 
   defp fetch_owned_media(_media_id, _current_user), do: {:error, :not_found}
 
-  defp build_publish_opts(params, current_user, boundary, extra_circles, post_attrs) do
-    [
-      current_user: current_user,
-      post_attrs: post_attrs,
-      boundary: boundary,
-      to_circles: extra_circles
-    ]
-    |> maybe_add_sensitive(params["sensitive"])
+  defp build_publish_opts(params, current_user, post_attrs) do
+    context_id = params["context_id"]
+    explicit_visibility = params["visibility"]
+
+    base_opts =
+      [current_user: current_user, post_attrs: post_attrs]
+      |> maybe_add_sensitive(params["sensitive"])
+      |> maybe_add_context_id(context_id)
+
+    if context_id && is_nil(explicit_visibility) do
+      apply_context_boundary(base_opts, context_id)
+    else
+      {boundary, extra_circles} = visibility_to_boundary(explicit_visibility)
+      extra_circles = if context_id, do: [context_id | extra_circles], else: extra_circles
+
+      base_opts
+      |> Keyword.put(:boundary, boundary)
+      |> Keyword.put(:to_circles, extra_circles)
+    end
   end
+
+  defp apply_context_boundary(opts, context_id) do
+    if Extend.module_enabled?(Bonfire.Classify.Boundaries, opts) and
+         Extend.module_enabled?(Bonfire.Classify.Categories, opts) do
+      case Bonfire.Classify.Categories.get(context_id, opts) do
+        {:ok, context} ->
+          dcv = Bonfire.Classify.Boundaries.read_default_content_visibility(context)
+          circles = Bonfire.Classify.Boundaries.post_circles_for_group(context)
+          boundaries = dcv |> List.wrap() |> Enum.reject(&is_nil/1)
+          boundaries = if boundaries == [], do: ["public"], else: boundaries
+
+          opts
+          |> Keyword.put(:to_boundaries, boundaries)
+          |> Keyword.put(:to_circles, circles)
+
+        _ ->
+          {boundary, _} = visibility_to_boundary(nil)
+          Keyword.put(opts, :boundary, boundary)
+      end
+    else
+      {boundary, _} = visibility_to_boundary(nil)
+      Keyword.put(opts, :boundary, boundary)
+    end
+  end
+
+  defp maybe_add_context_id(opts, nil), do: opts
+  defp maybe_add_context_id(opts, context_id), do: Keyword.put(opts, :context_id, context_id)
 
   defp visibility_to_boundary("public"), do: {"public", []}
   defp visibility_to_boundary("unlisted"), do: {"unlisted", []}
