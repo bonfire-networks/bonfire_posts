@@ -490,8 +490,7 @@ defmodule Bonfire.Posts do
            |> debug("tags")
            |> Bonfire.Social.Tags.list_tags_mentions(subject)
            |> debug("list_tags_mentions")
-           |> Enum.map(&ActivityPub.Actor.get_cached!(pointer: &1))
-           |> filter_empty([])
+           |> ActivityPub.Actor.list_cached()
            |> debug("mentions to actors"),
          # TODO: put much of this logic somewhere reusable by objects other than Post, eg `Bonfire.Federate.ActivityPub.AdapterUtils.determine_recipients/4`
          # TODO: add a followers-only preset?
@@ -505,7 +504,7 @@ defmodule Bonfire.Posts do
            |> Enum.reject(fn u ->
              id(u) == id(subject)
            end)
-           |> Enum.map(&ActivityPub.Actor.get_cached!(pointer: &1))
+           |> ActivityPub.Actor.list_cached()
            |> Enum.concat(mentions)
            |> Enums.uniq_by_id()
            |> debug("mentions to recipients")
