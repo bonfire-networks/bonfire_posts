@@ -723,13 +723,13 @@ defmodule Bonfire.Posts do
         ap_object
       )
       when not is_nil(creator) do
-    io_inspect(
+    debug(
       {Bonfire.Common.Enums.id(creator), e(creator, :peered, :MISSING),
        e(creator, :character, :peered, :MISSING)},
       "AP_RECEIVE_DEBUG creator id / peered / character.peered"
     )
 
-    io_inspect(creator, "AP_RECEIVE_DEBUG full creator")
+    debug(creator, "AP_RECEIVE_DEBUG full creator")
     # debug(creator: creator)
     # debug(ap_activity, "ap_receive_activity: Create")
     # debug(ap_object, "ap_object")
