@@ -90,7 +90,21 @@ defmodule Bonfire.Posts do
       {:ok, %Post{}}
   """
   def publish(opts) do
-    run_epic(:publish, to_options(opts))
+    opts = to_options(opts)
+
+    # preload the creator's `:peered` before the epic runs (resolves local vs remote — a post can be
+    # created either way), so the `created.creator` that flows into the post carries it and
+    # federation's `is_local?` check needs no per-object preload
+    opts =
+      case Bonfire.Common.Utils.current_user(opts) do
+        %{} = creator ->
+          Keyword.put(opts, :current_user, repo().maybe_preload(creator, character: [:peered]))
+
+        _ ->
+          opts
+      end
+
+    run_epic(:publish, opts)
     # |> debug("published")
   end
 
@@ -709,6 +723,13 @@ defmodule Bonfire.Posts do
         ap_object
       )
       when not is_nil(creator) do
+    io_inspect(
+      {Bonfire.Common.Enums.id(creator), e(creator, :peered, :MISSING),
+       e(creator, :character, :peered, :MISSING)},
+      "AP_RECEIVE_DEBUG creator id / peered / character.peered"
+    )
+
+    io_inspect(creator, "AP_RECEIVE_DEBUG full creator")
     # debug(creator: creator)
     # debug(ap_activity, "ap_receive_activity: Create")
     # debug(ap_object, "ap_object")
