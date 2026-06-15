@@ -30,8 +30,8 @@ defmodule Bonfire.Posts.Reindex do
   def config do
     # `first_id`: lowest ULID string (Needle.UID-castable), see Bonfire.Me.Users.ReindexLocal.
     %DataMigration.Config{
-      batch_size: 100,
-      throttle_ms: 0,
+      batch_size: 50,
+      throttle_ms: 2000,
       repo: Bonfire.Common.Repo,
       first_id: "00000000000000000000000000"
     }
