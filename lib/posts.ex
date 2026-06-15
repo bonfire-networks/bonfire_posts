@@ -393,6 +393,16 @@ defmodule Bonfire.Posts do
   end
 
   @doc """
+  Query for posts, optionally filtered by federation origin (`:local`, `:remote`, or `:all`/`nil`).
+  Reuses `query_base/1` (so it shares future-ULID filtering etc.) and the shared
+  `Bonfire.Federate.ActivityPub.Peered.filter_by_origin/2` for the local/remote semantics.
+  """
+  def query_by_origin(origin \\ nil, opts \\ []) do
+    query_base(opts)
+    |> Bonfire.Federate.ActivityPub.Peered.filter_by_origin(origin)
+  end
+
+  @doc """
   Searches for posts.
 
   ## Parameters
