@@ -57,6 +57,8 @@ defmodule Bonfire.Posts.Acts.Posts.Publish do
         id = epic.assigns[:options][id_key]
         attrs = Keyword.get(epic.assigns[:options], attrs_key, %{})
         boundary = epic.assigns[:options][:boundary]
+        # the schema/type to create — defaults to Post, but e.g. Bonfire.Articles passes Article
+        schema = epic.assigns[:options][:schema] || Bonfire.Data.Social.Post
 
         maybe_debug(
           epic,
@@ -68,7 +70,7 @@ defmodule Bonfire.Posts.Acts.Posts.Publish do
         # maybe_debug(epic, act, attrs, "Post attrs")
         if attrs == %{}, do: maybe_debug(act, attrs, "empty attrs")
 
-        Posts.changeset(:create, attrs, current_user, boundary)
+        Posts.changeset(:create, attrs, current_user, boundary, schema)
         |> Map.put(:action, :insert)
         |> maybe_overwrite_id(id, attrs)
         |> Untangle.debug("Post changeset")

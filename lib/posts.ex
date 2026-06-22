@@ -38,15 +38,13 @@ defmodule Bonfire.Posts do
   def query_module, do: __MODULE__
 
   @behaviour Bonfire.Federate.ActivityPub.FederationModules
+  # NOTE: the `Article` AP type is handled by the `bonfire_articles` extension (`Bonfire.Articles`).
   def federation_module,
     do: [
       "Note",
-      "Article",
       "ChatMessage",
       {"Create", "Note"},
-      {"Update", "Note"},
-      {"Create", "Article"},
-      {"Update", "Article"}
+      {"Update", "Note"}
     ]
 
   @doc """
@@ -207,22 +205,22 @@ defmodule Bonfire.Posts do
 
       iex> Bonfire.Posts.changeset(:create, %{title: "New Post"})
   """
-  def changeset(action, attrs, creator \\ nil, preset \\ nil)
+  def changeset(action, attrs, creator \\ nil, preset \\ nil, schema \\ Post)
 
-  def changeset(_, attrs, _creator, _preset) when attrs == %{} do
+  def changeset(_, attrs, _creator, _preset, schema) when attrs == %{} do
     # keep it simple for forms
-    Post.changeset(%Post{}, attrs)
+    schema.changeset(struct(schema), attrs)
   end
 
-  def changeset(:create, attrs, _creator, _preset_or_custom_boundary) do
+  def changeset(:create, attrs, _creator, _preset_or_custom_boundary, schema) do
     attrs
     |> prepare_post_attrs()
     |> debug("post_attrs")
-    |> Post.changeset(%Post{}, ...)
+    |> schema.changeset(struct(schema), ...)
   end
 
-  def changeset(_, attrs, _creator, _preset_or_custom_boundary) do
-    Post.changeset(%Post{}, attrs)
+  def changeset(_, attrs, _creator, _preset_or_custom_boundary, schema) do
+    schema.changeset(struct(schema), attrs)
   end
 
   def prepare_post_attrs(attrs, opts \\ []) do
@@ -387,10 +385,16 @@ defmodule Bonfire.Posts do
   end
 
   defp query_base(opts) do
-    from(main_object in Post, as: :main_object)
+    from(main_object in query_schema(opts), as: :main_object)
     |> repo().maybe_filter_out_future_ulids(opts)
     |> proload([:post_content])
   end
+
+  # The pointable/virtual schema to query (and create). Defaults to `Post`, but
+  # `Bonfire.Articles` (and any other extension reusing this module) can pass
+  # `schema: SomeSchema` to query/create its own type while reusing all the logic.
+  defp query_schema(opts) when is_list(opts), do: opts[:schema] || Post
+  defp query_schema(_), do: Post
 
   @doc """
   Query for posts, optionally filtered by federation origin (`:local`, `:remote`, or `:all`/`nil`).
@@ -568,7 +572,7 @@ defmodule Bonfire.Posts do
                "cc" => cc
              },
              object:
-               (maybe_note_to_article(object, ap_id) || object)
+               apply_ap_object_transform(object, ap_id, opts)
                |> Map.merge(%{
                  "id" => ap_id,
                  "to" => to,
@@ -585,53 +589,14 @@ defmodule Bonfire.Posts do
     end
   end
 
-  def maybe_note_to_article(object, url) do
-    name = object["name"]
-    content = object["content"]
-
-    if is_binary(name) and
-         byte_size(name) > 2 and
-         String.length(content || "") > Bonfire.Posts.Integration.article_char_threshold() do
-      custom_summary = object["summary"]
-
-      summary =
-        custom_summary ||
-          Text.sentence_truncate(Text.text_only(Text.maybe_markdown_to_html(content)), 500)
-
-      # Create simplified preview Note with only essential fields
-      preview =
-        %{
-          "type" => "Note",
-          "name" => name,
-          "summary" => summary,
-          "content" => content
-        }
-        |> Enum.filter(fn {_, v} -> not is_nil(v) end)
-        |> Enum.into(%{})
-
-      # Find first image attachment for cover image
-      # first_image =
-      #   object["attachment"]
-      #   |> List.wrap()
-      #   |> Enum.find(fn attachment ->
-      #     case attachment do
-      #       %{"mediaType" => media_type} -> String.starts_with?(media_type, "image/")
-      #       %{"type" => "Image"} -> true
-      #       _ -> false
-      #     end
-      #   end)
-
-      # Convert Note to Article and embed simplified Note as preview
-      object
-      |> Map.put("type", "Article")
-      # make sure we have summary where Masto expects it
-      |> Map.put("summary", summary)
-      # avoid duplicating the content in both fields
-      |> Map.put("content", content)
-      # Add url field pointing to the object's id
-      |> Map.put("url", url)
-      # Add first image if any as cover image - TODO: have the user select which one?
-      |> Map.put("preview", preview)
+  # Posts federate as the plain `Note` built by `PostContents.ap_prepare_object_note/7`.
+  # Other object types reusing this pipeline (e.g. `Bonfire.Articles`) can pass an
+  # `ap_object_transform: fn object, ap_id -> object end` to reshape the AP object
+  # (keeping this module free of any type-specific knowledge).
+  defp apply_ap_object_transform(object, url, opts) do
+    case opts[:ap_object_transform] do
+      fun when is_function(fun, 2) -> fun.(object, url)
+      _ -> object
     end
   end
 
@@ -669,10 +634,15 @@ defmodule Bonfire.Posts do
       iex> Bonfire.Posts.ap_receive_activity(creator, activity, object)
       {:ok, %Post{}}
   """
+  # `opts[:schema]` lets `Bonfire.Articles` reuse this to receive `Article` objects
+  # (defaults to creating/reading `Post`).
+  def ap_receive_activity(creator, ap_activity, ap_object, opts \\ [])
+
   def ap_receive_activity(
         creator,
         %{data: %{"type" => "Update"} = activity_data} = _ap_activity,
-        ap_object
+        ap_object,
+        opts
       ) do
     # debug(activity_data, "do_an_update")
     post_data = e(ap_object, :data, %{})
@@ -683,7 +653,8 @@ defmodule Bonfire.Posts do
          true <-
            is_binary(pointer_id) ||
              error(:not_found, "No pointer_id in the object so we can't find it to update"),
-         {:ok, post} <- original_pointer || read(pointer_id, skip_boundary_check: true),
+         {:ok, post} <-
+           original_pointer || read(pointer_id, Keyword.merge(opts, skip_boundary_check: true)),
          _ = debug(post, "post before update"),
          {:ok, attrs, updated_post_content} <-
            PostContents.ap_receive_update(creator, activity_data, post_data, pointer_id),
@@ -730,7 +701,8 @@ defmodule Bonfire.Posts do
   def ap_receive_activity(
         creator,
         ap_activity,
-        ap_object
+        ap_object,
+        opts
       )
       when not is_nil(creator) do
     debug(
@@ -823,7 +795,8 @@ defmodule Bonfire.Posts do
           boundary: boundary,
           to_circles: to_circles,
           verbs_to_grant: if(!is_public?, do: Config.get([:verbs_to_grant, :message])),
-          post_id: id
+          post_id: id,
+          schema: opts[:schema]
         )
         |> debug("opts for incoming post epic")
       )
