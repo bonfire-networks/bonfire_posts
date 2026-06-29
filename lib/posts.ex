@@ -674,30 +674,6 @@ defmodule Bonfire.Posts do
     end
   end
 
-  defp get_pointer_to_update(ap_object) do
-    post_data = e(ap_object, :data, %{})
-
-    with {:ok, %{pointer_id: pointer_id} = original_object} <-
-           ActivityPub.Object.get_cached(ap_id: post_data),
-         original_pointer = e(original_object, :pointer, nil),
-         pointer_id =
-           pointer_id || Enums.id(original_pointer) ||
-             Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object) do
-      {:ok, original_pointer, pointer_id}
-    else
-      {:error, :not_found} ->
-        if pointer_id = Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object) do
-          {:ok, nil, pointer_id}
-        else
-          error(ap_object, "Could not find the object being updated.")
-          {:error, :not_found}
-        end
-
-      e ->
-        error(e, "Error while looking for the object being updated.")
-    end
-  end
-
   def ap_receive_activity(
         creator,
         ap_activity,
@@ -800,6 +776,30 @@ defmodule Bonfire.Posts do
         )
         |> debug("opts for incoming post epic")
       )
+    end
+  end
+
+  defp get_pointer_to_update(ap_object) do
+    post_data = e(ap_object, :data, %{})
+
+    with {:ok, %{pointer_id: pointer_id} = original_object} <-
+           ActivityPub.Object.get_cached(ap_id: post_data),
+         original_pointer = e(original_object, :pointer, nil),
+         pointer_id =
+           pointer_id || Enums.id(original_pointer) ||
+             Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object) do
+      {:ok, original_pointer, pointer_id}
+    else
+      {:error, :not_found} ->
+        if pointer_id = Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object) do
+          {:ok, nil, pointer_id}
+        else
+          error(ap_object, "Could not find the object being updated.")
+          {:error, :not_found}
+        end
+
+      e ->
+        error(e, "Error while looking for the object being updated.")
     end
   end
 
