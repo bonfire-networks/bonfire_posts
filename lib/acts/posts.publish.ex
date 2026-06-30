@@ -27,7 +27,7 @@ defmodule Bonfire.Posts.Acts.Posts.Publish do
   # see module documentation
   @doc false
   def run(epic, act) do
-    current_user = Bonfire.Common.Utils.current_user(epic.assigns[:options])
+    current_user = Bonfire.Common.Utils.current_user_or_id(epic.assigns[:options])
 
     cond do
       epic.errors != [] ->
@@ -45,10 +45,10 @@ defmodule Bonfire.Posts.Acts.Posts.Publish do
           epic,
           act,
           current_user,
-          "Skipping due to missing current_user"
+          "Cannot publish: missing current_user"
         )
 
-        epic
+        Epic.add_error(epic, act, "Need to specify an author to publish a post")
 
       true ->
         as = Keyword.get(act.options, :as, :post)

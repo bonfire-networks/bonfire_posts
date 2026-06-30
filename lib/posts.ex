@@ -96,7 +96,11 @@ defmodule Bonfire.Posts do
     opts =
       case Bonfire.Common.Utils.current_user(opts) do
         %{} = creator ->
-          Keyword.put(opts, :current_user, repo().maybe_preload(creator, character: [:peered]))
+          Keyword.put(
+            opts,
+            :current_user,
+            repo().maybe_preload(creator, [:settings, character: [:peered]])
+          )
 
         _ ->
           opts
