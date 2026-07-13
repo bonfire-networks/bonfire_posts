@@ -463,6 +463,7 @@ defmodule Bonfire.Posts do
   def ap_publish_activity(subject, verb, post, opts \\ []) do
     id = uid!(post)
 
+    # TODO: move preloads to the caller of the epic, so they benefit all acts and side effects
     post =
       post
       |> repo().maybe_preload([
@@ -477,10 +478,12 @@ defmodule Bonfire.Posts do
       |> debug("post to federate")
 
     subject =
-      subject ||
-        e(post, :created, :creator, nil) ||
-        e(post, :created, :creator_id, nil) || e(post, :activity, :subject, nil) ||
-        e(post, :activity, :subject_id, nil)
+      (subject ||
+         e(post, :created, :creator, nil) ||
+         e(post, :created, :creator_id, nil) || e(post, :activity, :subject, nil) ||
+         e(post, :activity, :subject_id, nil))
+      # the interaction policy + canonical URLs below need the actor type & locality
+      |> repo().maybe_preload([:shared_user, character: [:peered]], prune: true)
 
     thread_creator =
       e(post, :replied, :thread, :created, :creator, nil) ||
