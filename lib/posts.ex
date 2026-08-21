@@ -485,17 +485,6 @@ defmodule Bonfire.Posts do
       # the interaction policy + canonical URLs below need the actor type & locality
       |> repo().maybe_preload([:shared_user, character: [:peered]], prune: true)
 
-    thread_creator =
-      e(post, :replied, :thread, :created, :creator, nil) ||
-        e(post, :replied, :thread, :created, :creator_id, nil)
-
-    reply_to_creator =
-      (e(post, :replied, :reply_to, :created, :creator, nil) ||
-         e(post, :replied, :reply_to, :created, :creator_id, nil))
-      |> debug("reply_to_creator")
-
-    # TODO: should we just include ALL thread participants? ^
-
     reply_to_id = e(post, :replied, :reply_to_id, nil)
 
     is_public = Bonfire.Boundaries.object_public?(post)
@@ -506,49 +495,19 @@ defmodule Bonfire.Posts do
         post
       )
 
-    to =
-      if is_public do
-        [Bonfire.Federate.ActivityPub.AdapterUtils.public_uri()]
-      else
-        []
-      end
+    %{to: to, cc: cc, bcc: bcc, mentions: mentions} =
+      Bonfire.Federate.ActivityPub.AdapterUtils.determine_recipients(
+        subject,
+        post,
+        is_public,
+        cc: opts[:cc]
+      )
 
     thread_id = e(post, :replied, :thread_id, nil)
 
     with {:ok, actor} <-
            ActivityPub.Actor.get_cached(pointer: subject),
-         # TODO: find a better way of deleting non-actor entries from the list
-         # (or better: represent them in AP)
-         # Note: `mentions` preset adds grants to mentioned people which should trigger the boundaries-based logic in `Adapter.external_followers_for_activity`, so should we use this only for tagging and not for addressing (if we expand the scope of that function beyond followers)?
-         mentions <-
-           post
-           |> debug("tags")
-           |> Bonfire.Social.Tags.list_tags_mentions(subject)
-           |> debug("list_tags_mentions")
-           |> ActivityPub.Actor.list_cached()
-           |> debug("mentions to actors"),
-         # TODO: put much of this logic somewhere reusable by objects other than Post, eg `Bonfire.Federate.ActivityPub.AdapterUtils.determine_recipients/4`
          # TODO: add a followers-only preset?
-         #  (if is_public do
-         #     mentions ++ List.wrap(actor.data["followers"])
-         #   else
-         cc <-
-           [reply_to_creator, thread_creator]
-           #  |> info("tags")
-           |> Enums.uniq_by_id()
-           |> Enum.reject(fn u ->
-             id(u) == id(subject)
-           end)
-           |> ActivityPub.Actor.list_cached()
-           |> Enum.concat(mentions)
-           |> Enums.uniq_by_id()
-           |> debug("mentions to recipients")
-           |> Enum.map(& &1.ap_id)
-           # FEP-044f: include extra cc recipients (e.g. quoted author for Update after acceptance)
-           |> Enum.concat(List.wrap(opts[:cc]))
-           |> Enum.uniq()
-           |> debug("direct_recipients"),
-         # end),
          context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
          reply_to <-
            if(reply_to_id == thread_id, do: context) ||
@@ -575,9 +534,11 @@ defmodule Bonfire.Posts do
                DatesTimes.date_from_pointer(id)
                |> DateTime.to_iso8601(),
              to: to,
-             additional: %{
-               "cc" => cc
-             },
+             additional:
+               %{
+                 "cc" => cc
+               }
+               |> Enums.maybe_put("bcc", bcc),
              object:
                apply_ap_object_transform(object, ap_id, opts)
                |> Map.merge(%{
@@ -586,6 +547,7 @@ defmodule Bonfire.Posts do
                  "cc" => cc,
                  "interactionPolicy" => interaction_policy
                })
+               |> Enums.maybe_put("bcc", bcc)
            },
          {:ok, activity} <-
            ap_create_or_update(
