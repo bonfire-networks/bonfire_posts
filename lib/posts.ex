@@ -522,7 +522,8 @@ defmodule Bonfire.Posts do
              mentions,
              context,
              reply_to
-           ),
+           )
+           |> Bonfire.Files.ap_merge_media(e(post, :media, nil)),
          ap_id = object["id"] || URIs.canonical_url(post),
          params <-
            %{
