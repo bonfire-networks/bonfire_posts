@@ -495,7 +495,8 @@ defmodule Bonfire.Posts do
         post
       )
 
-    %{to: to, cc: cc, bcc: bcc, mentions: mentions} =
+    %{mentions: mentions} =
+      recipients =
       Bonfire.Federate.ActivityPub.AdapterUtils.determine_recipients(
         subject,
         post,
@@ -534,22 +535,15 @@ defmodule Bonfire.Posts do
              published:
                DatesTimes.date_from_pointer(id)
                |> DateTime.to_iso8601(),
-             to: to,
-             additional:
-               %{
-                 "cc" => cc
-               }
-               |> Enums.maybe_put("bcc", bcc),
              object:
                apply_ap_object_transform(object, ap_id, opts)
                |> Map.merge(%{
                  "id" => ap_id,
-                 "to" => to,
-                 "cc" => cc,
                  "interactionPolicy" => interaction_policy
                })
-               |> Enums.maybe_put("bcc", bcc)
-           },
+           }
+           # to/cc/bcc/audience, on the activity and the object, in one place
+           |> Bonfire.Federate.ActivityPub.AdapterUtils.put_addressing(recipients),
          {:ok, activity} <-
            ap_create_or_update(
              verb,
