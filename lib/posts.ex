@@ -727,6 +727,11 @@ defmodule Bonfire.Posts do
     else
       info(is_public?, "treat as Post - public?")
 
+      # a post from a remote instance addressed to one of OUR groups is published INTO that group, which is what then makes the group boost and announce it onward. For a group we merely follow, belonging still comes from that group's own `Announce` instead
+      publish_in =
+        Bonfire.Federate.ActivityPub.AdapterUtils.local_group_audiences(activity_data, post_data)
+        |> debug("local groups or topics this post is addressed to, if any")
+
       publish(
         Keyword.merge(attrs[:opts] || [],
           local: false,
@@ -734,6 +739,9 @@ defmodule Bonfire.Posts do
           post_attrs: attrs,
           boundary: boundary,
           to_circles: to_circles,
+          publish_in: Enums.ids(publish_in),
+          # so `Bonfire.Social.Acts.Federate` can tie this AP object to the post it is creating, BEFORE the acts that relay it run
+          ap_object: ap_object,
           verbs_to_grant: if(!is_public?, do: Config.get([:verbs_to_grant, :message])),
           post_id: id,
           schema: opts[:schema]
