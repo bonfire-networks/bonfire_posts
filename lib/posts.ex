@@ -537,10 +537,8 @@ defmodule Bonfire.Posts do
                |> DateTime.to_iso8601(),
              object:
                apply_ap_object_transform(object, ap_id, opts)
-               |> Map.merge(%{
-                 "id" => ap_id,
-                 "interactionPolicy" => interaction_policy
-               })
+               |> Map.merge(%{"id" => ap_id})
+               |> Map.merge(interaction_policy)
            }
            # to/cc/bcc/audience, on the activity and the object, in one place
            |> Bonfire.Federate.ActivityPub.AdapterUtils.put_addressing(recipients),
