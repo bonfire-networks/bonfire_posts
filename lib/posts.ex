@@ -728,6 +728,7 @@ defmodule Bonfire.Posts do
       info(is_public?, "treat as Post - public?")
 
       # a post from a remote instance addressed to one of OUR groups is published INTO that group, which is what then makes the group boost and announce it onward. For a group we merely follow, belonging still comes from that group's own `Announce` instead
+      # TODO: derive the local groups this object belongs to ONCE in Incoming  and pass them to every module through the `opts` argument that `ap_receive_activity/4` already takes but this dispatch never fills. Today only `Bonfire.Posts` reads them, so a remote post addressed to one of our groups is filed correctly while a poll (`Question`) or anything landing in the `APActivities` fallback is not. Media and Articles inherit it only because their `Page` clause delegates to `Bonfire.Posts`.
       publish_in =
         Bonfire.Federate.ActivityPub.AdapterUtils.local_group_audiences(activity_data, post_data)
         |> debug("local groups or topics this post is addressed to, if any")
