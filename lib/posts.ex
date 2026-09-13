@@ -107,7 +107,6 @@ defmodule Bonfire.Posts do
       end
 
     run_epic(:publish, opts)
-    # |> debug("published")
   end
 
   def publish(post_attrs, opts) do

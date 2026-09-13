@@ -19,13 +19,11 @@ defmodule Bonfire.Posts.API.MastoAdapter do
         case publish_from_masto_params(params, current_user) do
           {:ok, post} ->
             post =
-              post
-              |> repo().maybe_preload([
-                :post_content,
-                :media,
-                :replied,
-                activity: [:subject]
-              ])
+              if is_struct(post) do
+                repo().maybe_preload(post, [:post_content, :media, :replied, activity: [:subject]])
+              else
+                post
+              end
 
             status =
               Mappers.Status.from_post(post,
@@ -50,17 +48,27 @@ defmodule Bonfire.Posts.API.MastoAdapter do
   defp publish_from_masto_params(params, current_user) do
     with {:ok, post_attrs} <- build_post_attrs(params, current_user),
          opts <- build_publish_opts(params, current_user, post_attrs),
-         {:ok, post} <- Bonfire.Posts.publish(opts) do
+         {:ok, post} <- publish_status(params, opts) do
       {:ok, post}
     end
   end
+
+  defp publish_status(%{"poll" => poll}, opts) do
+    if Extend.module_enabled?(Bonfire.Poll.API.GraphQLMasto.Adapter, opts) do
+      Bonfire.Poll.API.GraphQLMasto.Adapter.create_poll(poll, opts)
+    else
+      {:error, {:unprocessable_entity, "Polls are not available"}}
+    end
+  end
+
+  defp publish_status(_params, opts), do: Bonfire.Posts.publish(opts)
 
   defp build_post_attrs(params, current_user) do
     status_text = params["status"] || ""
 
     with {:ok, media} <-
            fetch_media_by_ids(params["media_ids"] || params["media_ids[]"] || [], current_user) do
-      if status_text == "" and media == [] do
+      if status_text == "" and media == [] and not Map.has_key?(params, "poll") do
         {:error, {:unprocessable_entity, "Text can't be blank"}}
       else
         {:ok,
@@ -131,7 +139,7 @@ defmodule Bonfire.Posts.API.MastoAdapter do
     if context_id && is_nil(explicit_visibility) do
       apply_context_boundary(base_opts, context_id)
     else
-      {boundary, extra_circles} = visibility_to_boundary(explicit_visibility)
+      {boundary, extra_circles} = visibility_to_boundary(explicit_visibility, current_user)
       extra_circles = if context_id, do: [context_id | extra_circles], else: extra_circles
 
       base_opts
@@ -155,11 +163,11 @@ defmodule Bonfire.Posts.API.MastoAdapter do
           |> Keyword.put(:to_circles, circles)
 
         _ ->
-          {boundary, _} = visibility_to_boundary(nil)
+          {boundary, _} = visibility_to_boundary(nil, opts[:current_user])
           Keyword.put(opts, :boundary, boundary)
       end
     else
-      {boundary, _} = visibility_to_boundary(nil)
+      {boundary, _} = visibility_to_boundary(nil, opts[:current_user])
       Keyword.put(opts, :boundary, boundary)
     end
   end
@@ -167,11 +175,16 @@ defmodule Bonfire.Posts.API.MastoAdapter do
   defp maybe_add_context_id(opts, nil), do: opts
   defp maybe_add_context_id(opts, context_id), do: Keyword.put(opts, :context_id, context_id)
 
-  defp visibility_to_boundary("public"), do: {"public", []}
-  defp visibility_to_boundary("unlisted"), do: {"unlisted", []}
-  defp visibility_to_boundary("private"), do: {"mentions", [{:followers, nil}]}
-  defp visibility_to_boundary("direct"), do: {"mentions", []}
-  defp visibility_to_boundary(_), do: {"public", []}
+  defp visibility_to_boundary("public", _current_user), do: {"public", []}
+  defp visibility_to_boundary("unlisted", _current_user), do: {"unlisted", []}
+
+  defp visibility_to_boundary("private", current_user) do
+    followers = Bonfire.Boundaries.Circles.get_stereotype_circle_ids(current_user, :followers)
+    {"mentions", followers}
+  end
+
+  defp visibility_to_boundary("direct", _current_user), do: {"mentions", []}
+  defp visibility_to_boundary(_, _current_user), do: {"public", []}
 
   defp maybe_add_sensitive(opts, sensitive) when sensitive in [true, "true", "1"] do
     Keyword.put(opts, :sensitive, true)
