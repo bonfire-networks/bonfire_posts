@@ -53,7 +53,7 @@ defmodule Bonfire.Posts.API.MastoAdapter do
     end
   end
 
-  defp publish_status(%{"poll" => poll}, opts) do
+  defp publish_status(%{"poll" => %{} = poll}, opts) do
     if Extend.module_enabled?(Bonfire.Poll.API.GraphQLMasto.Adapter, opts) do
       Bonfire.Poll.API.GraphQLMasto.Adapter.create_poll(poll, opts)
     else
@@ -68,7 +68,7 @@ defmodule Bonfire.Posts.API.MastoAdapter do
 
     with {:ok, media} <-
            fetch_media_by_ids(params["media_ids"] || params["media_ids[]"] || [], current_user) do
-      if status_text == "" and media == [] and not Map.has_key?(params, "poll") do
+      if status_text == "" and media == [] and not is_map(params["poll"]) do
         {:error, {:unprocessable_entity, "Text can't be blank"}}
       else
         {:ok,
