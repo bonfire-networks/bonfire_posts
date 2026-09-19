@@ -876,6 +876,24 @@ defmodule Bonfire.Posts do
     end
   end
 
+  @doc """
+  Whether a user has posted at all.
+
+  For callers that only want the yes or no, such as offering somebody a nudge to write their first post: Postgres stops at the first row it finds, where counting walks every post they ever wrote to answer the same question.
+
+      iex> any_by?(user_id)
+      true
+  """
+  def any_by?(user) do
+    if user_id = Types.uid(user) do
+      user_id
+      |> query_for_creator()
+      |> repo().exists?()
+    else
+      false
+    end
+  end
+
   # Helper function to update post metadata during Update activities
   # TODO: move somewhere reusable by other extensions
   defp update_post_assocs(creator, %{id: _pointer_id} = post, attrs) do

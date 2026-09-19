@@ -197,4 +197,38 @@ defmodule Bonfire.Posts.PostsTest do
       assert media.metadata["alt"] == "Alt text"
     end
   end
+
+  describe "any_by?/1" do
+    test "flips to true once the user publishes their first post" do
+      user = Fake.fake_user!()
+      refute Posts.any_by?(user)
+
+      assert {:ok, _post} =
+               Posts.publish(
+                 current_user: user,
+                 post_attrs: %{post_content: %{html_body: "hello world"}},
+                 boundary: "public"
+               )
+
+      assert Posts.any_by?(user)
+    end
+
+    test "stays false for somebody else's post" do
+      user = Fake.fake_user!()
+      other = Fake.fake_user!()
+
+      assert {:ok, _post} =
+               Posts.publish(
+                 current_user: other,
+                 post_attrs: %{post_content: %{html_body: "hello world"}},
+                 boundary: "public"
+               )
+
+      refute Posts.any_by?(user)
+    end
+
+    test "is false for nothing at all" do
+      refute Posts.any_by?(nil)
+    end
+  end
 end
