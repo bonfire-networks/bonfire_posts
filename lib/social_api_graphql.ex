@@ -16,7 +16,7 @@
 #     object :verb do
 #       field(:verb, :string)
 
-#       field :verb_display, :string do
+#       field :experienced_as, :string do
 #         resolve(fn
 #           %{verb: verb}, _, _ ->
 #             {:ok, Bonfire.Social.Activities.verb_display(verb)}
