@@ -298,6 +298,8 @@ defmodule Bonfire.Posts do
     # query FeedPublish
     # [posts_by: {by_user, &filter/3}]
     Objects.maybe_filter(query_base(opts), {:creators, by_user})
+    # posts, not replies, which have their own verb?
+    # |> Activities.maybe_filter({:exclude_activity_types, [:reply]}, [])
     |> list_paginated(to_options(opts) ++ [subject_user: by_user])
   end
 
