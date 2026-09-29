@@ -154,13 +154,16 @@ defmodule Bonfire.Posts.API.MastoAdapter do
       case Bonfire.Classify.Categories.get(context_id, opts) do
         {:ok, context} ->
           dcv = Bonfire.Classify.Boundaries.read_default_content_visibility(context)
-          circles = Bonfire.Classify.Boundaries.post_circles_for_group(context)
+
+          # no `to_circles`: that gave each post an ACL of its own; the group's shared ACLs are attached by `SetBoundaries` wherever the post comes from
+          # circles = Bonfire.Classify.Boundaries.post_circles_for_group(context)
           boundaries = dcv |> List.wrap() |> Enum.reject(&is_nil/1)
           boundaries = if boundaries == [], do: ["public"], else: boundaries
 
           opts
           |> Keyword.put(:to_boundaries, boundaries)
-          |> Keyword.put(:to_circles, circles)
+
+        # |> Keyword.put(:to_circles, circles)
 
         _ ->
           {boundary, _} = visibility_to_boundary(nil, opts[:current_user])
