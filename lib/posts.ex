@@ -490,12 +490,6 @@ defmodule Bonfire.Posts do
 
     is_public = Bonfire.Boundaries.object_public?(post)
 
-    interaction_policy =
-      Bonfire.Federate.ActivityPub.AdapterUtils.ap_prepare_outgoing_interaction_policy(
-        subject,
-        post
-      )
-
     %{mentions: mentions} =
       recipients =
       Bonfire.Federate.ActivityPub.AdapterUtils.determine_recipients(
@@ -503,6 +497,13 @@ defmodule Bonfire.Posts do
         post,
         is_public,
         cc: opts[:cc]
+      )
+
+    interaction_policy =
+      Bonfire.Federate.ActivityPub.AdapterUtils.ap_prepare_outgoing_interaction_policy(
+        subject,
+        post,
+        mentioned_characters: recipients[:mentioned_characters]
       )
 
     thread_id = e(post, :replied, :thread_id, nil)
