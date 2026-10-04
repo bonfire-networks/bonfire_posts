@@ -416,7 +416,6 @@ defmodule Bonfire.Posts.ThreadsPostsTest do
 
     # Call find_reply_to with reply_to_id
     result = Bonfire.Social.Threads.find_reply_to(%{reply_to_id: post.id}, user)
-    IO.inspect(result, label: "Threads.find_reply_to result")
 
     # Assert it returns {:ok, reply} and reply has expected id
     assert {:ok, reply} = result
