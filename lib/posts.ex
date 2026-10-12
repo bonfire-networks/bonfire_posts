@@ -549,6 +549,10 @@ defmodule Bonfire.Posts do
              verb,
              params
            ) do
+      # an edit reaches the group's followers through the group, as the post did. Not a `Create`, which the group's auto-boost already announces
+      if verb in [:edit, :update],
+        do: Bonfire.Federate.ActivityPub.AdapterUtils.maybe_group_relays(post, activity)
+
       {:ok, activity}
     end
   end
