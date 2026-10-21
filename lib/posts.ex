@@ -526,7 +526,14 @@ defmodule Bonfire.Posts do
              context,
              reply_to
            )
-           |> Bonfire.Files.ap_merge_media(e(post, :media, nil)),
+           |> then(
+             &maybe_apply(
+               Bonfire.Files,
+               :ap_merge_media,
+               [&1, e(post, :media, nil), [audience: recipients[:audience]]],
+               fallback_return: &1
+             )
+           ),
          ap_id = object["id"] || URIs.canonical_url(post),
          params <-
            %{
