@@ -196,6 +196,23 @@ defmodule Bonfire.Posts.PostsTest do
       assert media.metadata["label"] == "A caption"
       assert media.metadata["alt"] == "Alt text"
     end
+
+    test "a path on this server is not attached, it would copy a local file into public storage" do
+      user = Fake.fake_user!()
+      local = Bonfire.Files.Simulation.icon_file().path
+
+      assert {:ok, post} =
+               Posts.publish(
+                 current_user: user,
+                 boundary: "public",
+                 post_attrs: %{
+                   post_content: %{name: "With a local path", html_body: "body"},
+                   uploaded_media: [%{"href" => local}]
+                 }
+               )
+
+      assert [] == repo().preload(post, files: :media).files
+    end
   end
 
   describe "any_by?/1" do
