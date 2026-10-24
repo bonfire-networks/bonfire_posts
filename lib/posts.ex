@@ -496,7 +496,8 @@ defmodule Bonfire.Posts do
         subject,
         post,
         is_public,
-        cc: opts[:cc]
+        cc: opts[:cc],
+        verb: verb
       )
 
     interaction_policy =
@@ -556,10 +557,6 @@ defmodule Bonfire.Posts do
              verb,
              params
            ) do
-      # an edit reaches the group's followers through the group, as the post did. Not a `Create`, which the group's auto-boost already announces
-      if verb in [:edit, :update],
-        do: Bonfire.Federate.ActivityPub.AdapterUtils.maybe_group_relays(post, activity)
-
       {:ok, activity}
     end
   end
@@ -759,11 +756,12 @@ defmodule Bonfire.Posts do
          original_pointer = e(original_object, :pointer, nil),
          pointer_id =
            pointer_id || Enums.id(original_pointer) ||
-             Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object) do
+             Bonfire.Federate.ActivityPub.AdapterUtils.pointer_id_from_ap_object(ap_object) do
       {:ok, original_pointer, pointer_id}
     else
       {:error, :not_found} ->
-        if pointer_id = Bonfire.Social.Objects.pointer_id_from_ap_object(ap_object) do
+        if pointer_id =
+             Bonfire.Federate.ActivityPub.AdapterUtils.pointer_id_from_ap_object(ap_object) do
           {:ok, nil, pointer_id}
         else
           error(ap_object, "Could not find the object being updated.")
