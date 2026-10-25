@@ -113,6 +113,34 @@ defmodule Bonfire.Posts do
     publish(to_options(opts) |> Keyword.put(:post_attrs, post_attrs))
   end
 
+  @create_post_document """
+  mutation ($post_content: PostContentInput!, $boundary: String) {
+    create_post(post_content: $post_content, boundary: $boundary) {
+      id
+      activity { canonical_uri }
+    }
+  }
+  """
+
+  @doc "Runs `action` as the `current_user` in `opts` through `Bonfire.Federate.ActivityPub.Nomad`: `:publish` as `publish/1` does, for a local `current_user`; through the `create_post` mutation, for a local user asking for GraphQL (`nomad_transport: :graphql`), or a user from elsewhere with a token for their Bonfire's GraphQL API (`bonfire_graphql_token`), giving back the post's `id` and its activity's `canonical_uri`; as a status, for a user from elsewhere with a token for their server's Mastodon API (`mastodon_api_token`); for anyone else, it refuses (`{:error, {:not_supported, :publish, transport}}`)."
+  def nomad(:publish = action, opts),
+    do:
+      Bonfire.Federate.ActivityPub.Nomad.run(action, [opts],
+        local: &publish/1,
+        graphql: {@create_post_document, &graphql_create_post_variables/1},
+        mastodon_api: action
+      )
+
+  defp graphql_create_post_variables(opts) do
+    opts = to_options(opts)
+    post_content = get_in(opts, [:post_attrs, :post_content]) || %{}
+
+    %{
+      "post_content" => Map.new(post_content, fn {key, value} -> {to_string(key), value} end),
+      "boundary" => opts[:boundary]
+    }
+  end
+
   @doc """
   Deletes a post.
 
@@ -666,6 +694,19 @@ defmodule Bonfire.Posts do
     reply_to_id =
       e(reply_to_ap_object, :pointer_id, nil)
 
+    # replying to something we couldn't fetch: threaded under a placeholder for it, which it fills when it arrives. Only for threading: whether this is a message still goes by `reply_to_id`, what we actually hold
+    thread_under_id =
+      reply_to_id ||
+        with {:ok, placeholder_id} <-
+               Bonfire.Federate.ActivityPub.AdapterUtils.get_or_create_placeholder(
+                 Threads.reply_to_ap_id(activity_data, post_data),
+                 Bonfire.Federate.ActivityPub.AdapterUtils.thread_opener_id(post_data)
+               ) do
+          placeholder_id
+        else
+          _ -> nil
+        end
+
     is_public? =
       Bonfire.Federate.ActivityPub.AdapterUtils.is_public?(ap_activity, ap_object)
       |> debug("is_public?")
@@ -701,7 +742,7 @@ defmodule Bonfire.Posts do
         canonical_url: nil,
         #  needed here for Messages
         to_circles: to_circles,
-        reply_to_id: reply_to_id,
+        reply_to_id: thread_under_id,
         uploaded_media:
           Bonfire.Files.ap_receive_attachments(
             creator,
