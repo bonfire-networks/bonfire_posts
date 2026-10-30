@@ -756,7 +756,14 @@ defmodule Bonfire.Posts do
     # debug(to_circles, "to_circles")
     # debug(reply_to_id, "reply_to_id")
 
+    # not a message to the instance's federation bot: a message names its recipients, so the moderators it is for would see each other. It is a private post that mentions the bot instead
     if !is_public? and not Enum.empty?(to_circles || []) and
+         not maybe_apply(
+           Bonfire.Federate.ActivityPub.AdapterUtils,
+           :service_character_among?,
+           [to_circles],
+           fallback_return: false
+         ) and
          (!reply_to_id or
             Bonfire.Common.Types.object_type(
               repo().maybe_preload(reply_to_ap_object, :pointer)
