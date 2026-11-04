@@ -91,7 +91,7 @@ defmodule Bonfire.Posts.Acts.Posts.Publish do
 
       true ->
         dt =
-          Bonfire.Common.DatesTimes.to_date_time(scheduled_at)
+          scheduled_date_time(scheduled_at)
           |> debug("converted scheduled_at to datetime")
 
         id =
@@ -108,4 +108,23 @@ defmodule Bonfire.Posts.Acts.Posts.Publish do
 
   defp maybe_overwrite_id(changeset, id, _attrs),
     do: Ecto.Changeset.put_change(changeset, :id, id)
+
+  # A value without an offset (e.g. "2026-11-05T10:30" from an API caller) is read as UTC rather than dropped, which would publish the post at once
+  defp scheduled_date_time(scheduled_at) do
+    with nil <- Bonfire.Common.DatesTimes.to_date_time(scheduled_at),
+         true <- is_binary(scheduled_at),
+         {:ok, naive} <- parse_naive_date_time(scheduled_at) do
+      warn(scheduled_at, "scheduled_at has no UTC offset, assuming UTC")
+      DateTime.from_naive!(naive, "Etc/UTC")
+    else
+      %DateTime{} = dt -> dt
+      _ -> nil
+    end
+  end
+
+  # `datetime-local` leaves out the seconds, which ISO 8601 parsing in Elixir requires
+  defp parse_naive_date_time(string) do
+    with {:error, _} <- NaiveDateTime.from_iso8601(string),
+         do: NaiveDateTime.from_iso8601(string <> ":00")
+  end
 end

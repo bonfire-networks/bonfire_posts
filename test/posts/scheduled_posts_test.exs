@@ -80,4 +80,52 @@ defmodule Bonfire.Posts.ScheduledPostsTest do
                job.args["user_id"] == user.id
            end)
   end
+
+  # A browser's `datetime-local` input sends this shape, with no offset
+  test "a datetime without an offset is scheduled as UTC" do
+    user = Fake.fake_user!()
+
+    scheduled_dt =
+      DateTime.utc_now()
+      |> DateTime.add(7, :day)
+      |> Map.merge(%{second: 0, microsecond: {0, 0}})
+
+    naive_value = Calendar.strftime(scheduled_dt, "%Y-%m-%dT%H:%M")
+
+    assert {:ok, post} =
+             Posts.publish(
+               current_user: user,
+               post_attrs: %{
+                 post_content: %{html_body: "<p>scheduled without offset</p>"},
+                 scheduled_at: naive_value
+               },
+               boundary: "public"
+             )
+
+    {:ok, ulid_ts} = Needle.ULID.timestamp(post.id)
+    assert ulid_ts == DateTime.to_unix(scheduled_dt, :millisecond)
+
+    assert {:error, :not_found} = Posts.read(post.id, current_user: user)
+  end
+
+  test "a datetime with an offset is scheduled at that instant" do
+    user = Fake.fake_user!()
+    date = Date.utc_today() |> Date.add(7) |> Date.to_iso8601()
+
+    assert {:ok, post} =
+             Posts.publish(
+               current_user: user,
+               post_attrs: %{
+                 post_content: %{html_body: "<p>scheduled with offset</p>"},
+                 scheduled_at: date <> "T10:30:00+02:00"
+               },
+               boundary: "public"
+             )
+
+    {:ok, ulid_ts} = Needle.ULID.timestamp(post.id)
+    {:ok, expected_dt, _} = DateTime.from_iso8601(date <> "T08:30:00Z")
+    assert ulid_ts == DateTime.to_unix(expected_dt, :millisecond)
+
+    assert {:error, :not_found} = Posts.read(post.id, current_user: user)
+  end
 end
