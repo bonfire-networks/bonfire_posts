@@ -59,4 +59,25 @@ defmodule Bonfire.Posts.PostEditVersioningTest do
 
     assert v2.diff_count > 0
   end
+
+  # "clone_context" is what the reply composer sends by default: the reply gets the audience of the post it replies to. "public" is a chosen audience.
+  for boundary <- ["clone_context", "public"] do
+    test "the author of a reply with the boundary #{boundary} can edit it" do
+      op = Fake.fake_user!()
+      replier = Fake.fake_user!()
+      post = fake_post!(op, "public", %{post_content: %{html_body: "the opening post"}})
+
+      assert {:ok, reply} =
+               Posts.publish(
+                 current_user: replier,
+                 post_attrs: %{post_content: %{html_body: "the reply"}, reply_to_id: post.id},
+                 boundary: unquote(boundary)
+               )
+
+      assert {:ok, updated} =
+               PostContents.edit(replier, reply.id, %{html_body: "the reply, edited"})
+
+      assert updated.html_body =~ "the reply, edited"
+    end
+  end
 end

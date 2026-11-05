@@ -164,6 +164,8 @@ defmodule Bonfire.Posts do
     opts =
       to_options(opts)
       |> Keyword.put(:object, object)
+      # the delete epic's acts read the action from the options (eg. the search act unindexes on `:delete`, and indexes the object again otherwise); `Objects.delete/2` sets it, a direct call here didn't
+      |> Keyword.put_new(:action, :delete)
 
     # TODO: should we only delete the PostContent and the activity? so as to preserve thread and nesting integrity
 
@@ -658,6 +660,12 @@ defmodule Bonfire.Posts do
          _ = debug(post, "post before update"),
          {:ok, attrs, updated_post_content} <-
            PostContents.ap_receive_update(creator, activity_data, post_data, pointer_id),
+         # an edit that says nothing about being sensitive (Lemmy and PieFed comments never do) leaves the mark as it is, eg. one given by the group it was posted in (`maybe_sensitive_from_group/3`)
+         attrs =
+           if(Map.has_key?(post_data, "sensitive"),
+             do: attrs,
+             else: Map.delete(attrs, :sensitive)
+           ),
          _ = debug(attrs, "attrs from ap_receive_update"),
          _ = debug(updated_post_content, "updated_post_content from ap_receive_update"),
          post =
@@ -734,6 +742,7 @@ defmodule Bonfire.Posts do
         post_data,
         direct_recipients
       )
+      |> maybe_sensitive_from_group(post_data, opts[:publish_in])
 
     attrs =
       Map.merge(attrs, %{
@@ -757,7 +766,9 @@ defmodule Bonfire.Posts do
     # debug(reply_to_id, "reply_to_id")
 
     # not a message to the instance's federation bot: a message names its recipients, so the moderators it is for would see each other. It is a private post that mentions the bot instead
+    # not a message either when addressed to its author's followers: that is a followers-only post (which may also mention people), not a direct message, and its `to_circles` include the author's followers circle
     if !is_public? and not Enum.empty?(to_circles || []) and
+         not Bonfire.Federate.ActivityPub.AdapterUtils.addressed_to_author_followers?(ap_activity) and
          not maybe_apply(
            Bonfire.Federate.ActivityPub.AdapterUtils,
            :service_character_among?,
@@ -794,6 +805,15 @@ defmodule Bonfire.Posts do
         |> debug("opts for incoming post epic")
       )
     end
+  end
+
+  # A post that says nothing about being sensitive (Lemmy and PieFed comments never do), arriving in a group or topic marked sensitive, is stored sensitive, as those peers mark every post in a NSFW community. One that says `sensitive: false` keeps it (Mastodon and Bonfire send it on every post), so an author's choice holds
+  defp maybe_sensitive_from_group(attrs, %{"sensitive" => _}, _publish_in), do: attrs
+
+  defp maybe_sensitive_from_group(attrs, _post_data, publish_in) do
+    if Bonfire.Social.Objects.any_sensitive?(publish_in),
+      do: Map.put(attrs, :sensitive, true),
+      else: attrs
   end
 
   defp get_pointer_to_update(ap_object) do
@@ -955,7 +975,10 @@ defmodule Bonfire.Posts do
       |> repo().maybe_preload([:sensitive, :tags, :media])
       |> debug("post with old assocs preloaded")
 
-    with {:ok, post} <- Objects.set_sensitivity(post, attrs[:sensitive]) || {:ok, post},
+    # only when the attrs say something about it, as `set_sensitivity/2` reads a missing value as "not sensitive"
+    with {:ok, post} <-
+           (Map.has_key?(attrs, :sensitive) && Objects.set_sensitivity(post, attrs[:sensitive])) ||
+             {:ok, post},
          {:ok, post} <- Bonfire.Tag.maybe_update_tags(creator, post, attrs) || {:ok, post},
          post = repo().preload(post, :files),
          {:ok, post} <-
