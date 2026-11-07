@@ -799,6 +799,11 @@ defmodule Bonfire.Posts do
           # so `Bonfire.Social.Acts.Federate` can tie this AP object to the post it is creating, BEFORE the acts that relay it run
           ap_object: ap_object,
           verbs_to_grant: if(!is_public?, do: Config.get([:verbs_to_grant, :message])),
+          # Mastodon's "unlisted" (Public only in `cc`): readable by anyone and reaching followers, but kept out of the instance-wide feeds, as its author asked
+          # TODO: more support for it, eg. offering it in our composer, and the open questions on the `unlisted` boundary preset
+          skip_global_feeds:
+            is_public? and
+              Bonfire.Federate.ActivityPub.AdapterUtils.public_in_cc_only?(ap_activity, ap_object),
           post_id: id,
           schema: opts[:schema]
         )
