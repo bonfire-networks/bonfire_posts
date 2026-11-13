@@ -767,7 +767,8 @@ defmodule Bonfire.Posts do
 
     # not a message to the instance's federation bot: a message names its recipients, so the moderators it is for would see each other. It is a private post that mentions the bot instead
     # not a message either when addressed to its author's followers: that is a followers-only post (which may also mention people), not a direct message, and its `to_circles` include the author's followers circle
-    if !is_public? and not Enum.empty?(to_circles || []) and
+    # a message is sent to someone: the characters it's addressed to, not `to_circles`, which also holds the grants of its interaction policy (eg. Mastodon's `canQuote` for its author only, on every non-public post), so a post addressed to nobody we know would be taken for a message with no one to send it to
+    if !is_public? and not Enum.empty?(direct_recipients || []) and
          not Bonfire.Federate.ActivityPub.AdapterUtils.addressed_to_author_followers?(ap_activity) and
          not maybe_apply(
            Bonfire.Federate.ActivityPub.AdapterUtils,
