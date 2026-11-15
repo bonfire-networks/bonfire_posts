@@ -28,7 +28,9 @@ defmodule Bonfire.Posts.API.MastoAdapter do
             status =
               Mappers.Status.from_post(post,
                 current_user: current_user,
-                context_id: params["context_id"]
+                context_id: params["context_id"],
+                # the parent the author has just replied to is theirs to name
+                in_reply_to_id: e(post, :replied, :reply_to_id, nil)
               )
 
             RestAdapter.json(conn, status)
