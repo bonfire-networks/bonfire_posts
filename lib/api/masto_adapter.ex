@@ -6,7 +6,6 @@ defmodule Bonfire.Posts.API.MastoAdapter do
   use Bonfire.Common.Utils
 
   alias Bonfire.API.GraphQL.RestAdapter
-  alias Bonfire.API.MastoCompat.Mappers
 
   @doc "Create a new status (POST /api/v1/statuses)"
   def create_status(params, conn) do
@@ -18,22 +17,11 @@ defmodule Bonfire.Posts.API.MastoAdapter do
       try do
         case publish_from_masto_params(params, current_user) do
           {:ok, post} ->
-            post =
-              if is_struct(post) do
-                repo().maybe_preload(post, [:post_content, :media, :replied, activity: [:subject]])
-              else
-                post
-              end
-
-            status =
-              Mappers.Status.from_post(post,
-                current_user: current_user,
-                context_id: params["context_id"],
-                # the parent the author has just replied to is theirs to name
-                in_reply_to_id: e(post, :replied, :reply_to_id, nil)
-              )
-
-            RestAdapter.json(conn, status)
+            # read back through GraphQL, as show does
+            case Bonfire.Social.API.GraphQLMasto.Adapter.read_status(id(post), current_user) do
+              {:ok, status} -> RestAdapter.json(conn, status)
+              {:error, reason} -> RestAdapter.error_fn({:error, reason}, conn)
+            end
 
           {:error, reason} ->
             error(reason, "Failed to create status")
