@@ -18,9 +18,21 @@ defmodule Bonfire.Posts.API.MastoAdapter do
         case publish_from_masto_params(params, current_user) do
           {:ok, post} ->
             # read back through GraphQL, as show does
-            case Bonfire.Social.API.GraphQLMasto.Adapter.read_status(id(post), current_user) do
-              {:ok, status} -> RestAdapter.json(conn, status)
-              {:error, reason} -> RestAdapter.error_fn({:error, reason}, conn)
+            case read_back(id(post), current_user) do
+              {:ok, status} ->
+                RestAdapter.json(conn, status)
+
+              # the post exists by now, so an error here makes the client post it again
+              {:error, reason} ->
+                warn(
+                  reason,
+                  "Published status #{id(post)} could not be read back, answering from the published activity"
+                )
+
+                case published_status(post, current_user) do
+                  %{} = status -> RestAdapter.json(conn, status)
+                  _ -> RestAdapter.error_fn({:error, reason}, conn)
+                end
             end
 
           {:error, reason} ->
@@ -32,6 +44,33 @@ defmodule Bonfire.Posts.API.MastoAdapter do
           error(e, "Failed to create status")
           RestAdapter.error_fn({:error, e}, conn)
       end
+    end
+  end
+
+  # a raise here (a DB timeout) also reaches the fallback, not the `rescue` that answers an error
+  defp read_back(post_id, current_user) do
+    Bonfire.Social.API.GraphQLMasto.Adapter.read_status(post_id, current_user)
+  rescue
+    e -> {:error, e}
+  end
+
+  # the activity publish gave back, run through GraphQL as its root (as streaming does), skipping the `status(id:)` lookup
+  defp published_status(%{activity: %{id: _} = activity} = post, current_user)
+       when is_struct(post) do
+    Bonfire.Social.API.GraphQLMasto.Adapter.published_status(
+      Map.put(activity, :object, post),
+      current_user
+    )
+  end
+
+  # a poll comes back from the `createPoll` mutation as a map, so its question is read back for the activity
+  defp published_status(poll, current_user) do
+    with id when is_binary(id) <- id(poll),
+         {:ok, question} <- Bonfire.Poll.Questions.read(id, current_user: current_user),
+         true <- is_struct(question) do
+      published_status(question, current_user)
+    else
+      _ -> nil
     end
   end
 
