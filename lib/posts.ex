@@ -914,24 +914,26 @@ defmodule Bonfire.Posts do
     )
   end
 
-  def count_for_users(users) when is_list(users) do
-    user_ids =
-      users
-      |> Types.uids()
-      |> Enum.uniq()
+  @doc "Posts per user and the id of each user's newest post, in one grouped query: `%{user_id => %{count: n, newest_id: id}}`. Ids are ULIDs, so the newest id carries the date (masto-live-fixes decision 12)."
+  def stats_for_users(users) when is_list(users) do
+    case users |> Types.uids() |> Enum.uniq() do
+      [] ->
+        %{}
 
-    if user_ids == [] do
-      %{}
-    else
-      user_ids
-      |> query_for_creator()
-      |> select([c], {c.creator_id, count(c.id)})
-      |> repo().all()
-      |> Map.new()
+      user_ids ->
+        user_ids
+        |> query_for_creator()
+        # max(id) on Bonfire ids, as in Bonfire.Social.Threads' latest activity
+        |> select([c], {c.creator_id, %{count: count(c.id), newest_id: type(max(c.id), c.id)}})
+        |> repo().all()
+        |> Map.new()
     end
   end
 
-  def count_for_users(_), do: %{}
+  def stats_for_users(_), do: %{}
+
+  def count_for_users(users),
+    do: users |> stats_for_users() |> Map.new(fn {id, %{count: count}} -> {id, count} end)
 
   @doc """
   Count posts created by a single user.
