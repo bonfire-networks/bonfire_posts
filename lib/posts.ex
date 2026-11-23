@@ -113,6 +113,66 @@ defmodule Bonfire.Posts do
     publish(to_options(opts) |> Keyword.put(:post_attrs, post_attrs))
   end
 
+  @doc """
+  Publishes, as `author`, an article imported from elsewhere (eg. a Ghost article, a WordPress post): an `Article` when `Bonfire.Articles` is enabled for the author, else a post; backdated to `attrs.published_at` (so an old article doesn't surface as new); then records `attrs.canonical_url` as where it came from, which is how a later import finds it.
+
+  `attrs` has `name`, `summary`, `html_body` (as is: sanitise anything from a source you don't trust first), `published_at`, `canonical_url` and `uploaded_media`. `opts` go to `publish/1`, eg. `boundary:`, `to_circles:`, `context_id:`, `mentions:`.
+  """
+  def publish_imported(author, %{} = attrs, opts \\ []) do
+    published = attrs[:published_at]
+    post_id = (published && Bonfire.Common.DatesTimes.generate_ulid_if_past(published)) || nil
+
+    with {:ok, post} <-
+           publish(
+             Keyword.merge(to_options(opts),
+               current_user: author,
+               schema: imported_schema(author),
+               auto_boost_at: published,
+               post_id: post_id,
+               post_attrs: %{
+                 id: post_id,
+                 post_content: %{
+                   name: attrs[:name],
+                   summary: attrs[:summary],
+                   html_body: attrs[:html_body] || ""
+                 },
+                 uploaded_media: attrs[:uploaded_media]
+               }
+             )
+           ) do
+      maybe_save_canonical_url(post, attrs[:canonical_url])
+      {:ok, post}
+    end
+  end
+
+  @doc "The schema `publish_imported/3` publishes as for `author`, for reading the result back: `Bonfire.Articles.Article` when that extension is enabled for the author, else nil, meaning a post."
+  def imported_schema(author) do
+    if Bonfire.Common.Extend.module_enabled?(Bonfire.Articles, author),
+      do: Bonfire.Articles.Article
+  end
+
+  defp maybe_save_canonical_url(_post, nil), do: :ok
+
+  defp maybe_save_canonical_url(post, url) do
+    case Bonfire.Common.Utils.maybe_apply(
+           Bonfire.Federate.ActivityPub.Peered,
+           :save_canonical_uri,
+           [
+             post,
+             url
+           ]
+         ) do
+      {:ok, _} ->
+        :ok
+
+      err ->
+        error(
+          err,
+          "Could not save where an imported article came from, so importing it again may duplicate it"
+        )
+    end
+  end
+
   @create_post_document """
   mutation ($post_content: PostContentInput!, $boundary: String) {
     create_post(post_content: $post_content, boundary: $boundary) {
