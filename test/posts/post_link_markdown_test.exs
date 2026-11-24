@@ -28,8 +28,9 @@ defmodule Bonfire.Posts.PostLinkMarkdownTest do
         }
       })
 
+    # a URL ending a paragraph goes in a paragraph of its own (see `Bonfire.Common.Text.own_paragraph_urls/1`)
     assert post.post_content.html_body ==
-             "epic html with a link [developer.mozilla.org/en-US/...](https://developer.mozilla.org/en-US/docs/Web/API/)"
+             "epic html with a link\n\n[developer.mozilla.org/en-US/...](https://developer.mozilla.org/en-US/docs/Web/API/)"
 
     post =
       fake_post!(user, "public", %{
