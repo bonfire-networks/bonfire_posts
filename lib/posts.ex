@@ -151,6 +151,79 @@ defmodule Bonfire.Posts do
       do: Bonfire.Articles.Article
   end
 
+  @doc """
+  Hides, instance-wide, a post imported from elsewhere that its source no longer publishes (eg. a Ghost article unpublished or deleted, a WordPress post gone from its site), without deleting it, so its replies and likes are kept: out of the feeds, and unreadable even by direct link. `by` is who the moderation log records as hiding it (eg. its author). Reversed by `restore_imported/1`.
+  """
+  def retract_imported(post_id, by) do
+    with {:ok, _} <-
+           Bonfire.Boundaries.Blocks.block(post_id, :hide,
+             current_user: by,
+             scope: :instance_wide,
+             skip_boundary_check: true
+           ),
+         # `:hide` only unlists (it grants `:can_only_read`), so reading is denied too
+         :ok <- set_read_denial(post_id, :deny) do
+      {:ok, :hidden}
+    end
+  end
+
+  @doc """
+  Shows again a post hidden by `retract_imported/2`, when its source publishes it again. Safe to call on a post that was never hidden, which is how importers use it on every update (a `:hide` block can't be checked for).
+  """
+  def restore_imported(post_id) do
+    Bonfire.Boundaries.Blocks.unblock(post_id, :hide,
+      scope: :instance_wide,
+      skip_boundary_check: true
+    )
+
+    # else a post published again returns to the feeds but stays unreadable
+    set_read_denial(post_id, :allow)
+  rescue
+    e -> warn(e, "Could not show again a previously hidden imported post")
+  end
+
+  defp set_read_denial(post_id, :deny) do
+    with {:ok, acl} <-
+           Bonfire.Boundaries.Acls.get_or_create_object_custom_acl(post_id,
+             skip_boundary_check: true
+           ) do
+      apply_read_denial(acl, :deny)
+    end
+  end
+
+  # get-only, never get_or_create: `restore_imported/1` runs on every update, so creating here would make a custom ACL for every imported post on its first edit (and `single()` errors for good if two concurrent updates each made one). No custom ACL, nothing to lift
+  defp set_read_denial(post_id, :allow) do
+    case Bonfire.Boundaries.Acls.get_object_custom_acl(post_id) do
+      {:ok, acl} -> apply_read_denial(acl, :allow)
+      _ -> :ok
+    end
+  end
+
+  defp apply_read_denial(acl, deny_or_allow) do
+    circles = Bonfire.Boundaries.Blocks.instance_wide_circles([:guest, :local, :activity_pub])
+
+    result =
+      case deny_or_allow do
+        :deny ->
+          Bonfire.Boundaries.Grants.grant_role(circles, acl, :cannot_read,
+            scope: :instance_wide,
+            skip_boundary_check: true
+          )
+
+        :allow ->
+          Bonfire.Boundaries.Grants.remove_role(circles, acl, :cannot_read,
+            scope: :instance_wide,
+            skip_boundary_check: true
+          )
+      end
+
+    if Enums.all_ok?(result) do
+      :ok
+    else
+      error(result, "Could not #{deny_or_allow} reading a hidden imported post")
+    end
+  end
+
   defp maybe_save_canonical_url(_post, nil), do: :ok
 
   defp maybe_save_canonical_url(post, url) do
@@ -625,7 +698,7 @@ defmodule Bonfire.Posts do
                fallback_return: &1
              )
            ),
-         ap_id = object["id"] || URIs.canonical_url(post),
+         ap_id = object["id"] || federated_ap_id(verb, post),
          params <-
            %{
              pointer: id,
@@ -650,6 +723,12 @@ defmodule Bonfire.Posts do
       {:ok, activity}
     end
   end
+
+  # an edit refers to the post by the id its Create went out with, as likes and replies do: `URIs.canonical_url/1` would give an imported post's original URL instead, which the fediverse doesn't know it by
+  defp federated_ap_id(verb, post) when verb in [:edit, :update],
+    do: Bonfire.Federate.ActivityPub.AdapterUtils.federated_object_id(post)
+
+  defp federated_ap_id(_verb, post), do: URIs.canonical_url(post)
 
   # Posts federate as the plain `Note` built by `PostContents.ap_prepare_object_note/7`.
   # Other object types reusing this pipeline (e.g. `Bonfire.Articles`) can pass an
