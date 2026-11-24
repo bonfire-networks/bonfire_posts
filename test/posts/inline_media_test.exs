@@ -91,6 +91,64 @@ defmodule Bonfire.Posts.InlineMediaTest do
     assert InlineMedia.inline_ids(stored_body(post), [inline]) == [id(inline)]
   end
 
+  # one pass over an object's media and body: which media the body places (where it's cut, or an image it shows), the cut parts to render, and the rest for the attachment list
+  describe "split/3" do
+    defp placed_ids(%{inline_media: inline_media}),
+      do: inline_media |> Map.values() |> Enum.map(&id/1) |> Enum.uniq()
+
+    test "a markdown body: an image alone in its paragraph is placed and cut there, the rest is listed",
+         %{inline: inline, other: other} do
+      url = Bonfire.Files.inline_url(inline)
+      split = InlineMedia.split([inline, other], "Intro\n\n![](#{url})\n\nmore")
+
+      assert placed_ids(split) == [id(inline)]
+      assert Enum.map(split.unplaced, &id/1) == [id(other)]
+      assert {:url, url} in split.parts
+    end
+
+    test "a markdown body: an image in the middle of a sentence is placed, so it shows once",
+         %{inline: inline} do
+      split = InlineMedia.split([inline], "see ![](#{Bonfire.Files.inline_url(inline)}) here")
+
+      assert placed_ids(split) == [id(inline)]
+      assert split.unplaced == []
+    end
+
+    # it isn't cut, so it shows only as a link in the text: its card stays in the list
+    test "a markdown body: a link in the middle of a sentence isn't placed, so it keeps its card",
+         %{inline: inline} do
+      split = InlineMedia.split([inline], "see #{Bonfire.Files.inline_url(inline)} here")
+
+      assert placed_ids(split) == []
+      assert Enum.map(split.unplaced, &id/1) == [id(inline)]
+    end
+
+    test "an HTML body: a link alone in its paragraph is placed and cut there, one in a sentence isn't",
+         %{inline: inline, other: other} do
+      url = Bonfire.Files.inline_url(inline)
+      other_url = Bonfire.Files.inline_url(other)
+
+      split =
+        InlineMedia.split(
+          [inline, other],
+          ~s(<p>a</p><p><a href="#{url}">#{url}</a></p><p>see <a href="#{other_url}">it</a> here</p>)
+        )
+
+      assert placed_ids(split) == [id(inline)]
+      assert Enum.map(split.unplaced, &id/1) == [id(other)]
+      assert {:url, url} in split.parts
+    end
+
+    test "control: a body without any of the URLs places nothing and isn't cut",
+         %{inline: inline, other: other} do
+      split = InlineMedia.split([inline, other], "no media in the text")
+
+      assert split.inline_media == %{}
+      assert split.parts == nil
+      assert Enum.map(split.unplaced, &id/1) == [id(inline), id(other)]
+    end
+  end
+
   # the composer writes `upload:<ref>` for a file not uploaded yet: at publish each becomes the stored media's URL
   describe "swap_upload_refs/2" do
     test "puts each stored media's URL in place of its upload ref", %{
