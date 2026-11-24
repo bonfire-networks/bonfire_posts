@@ -649,8 +649,6 @@ defmodule Bonfire.Posts do
       # the interaction policy + canonical URLs below need the actor type & locality
       |> repo().maybe_preload([:shared_user, character: [:peered]], prune: true)
 
-    reply_to_id = e(post, :replied, :reply_to_id, nil)
-
     is_public = Bonfire.Boundaries.object_public?(post)
 
     %{mentions: mentions} =
@@ -670,16 +668,10 @@ defmodule Bonfire.Posts do
         mentioned_characters: recipients[:mentioned_characters]
       )
 
-    thread_id = e(post, :replied, :thread_id, nil)
-
     with {:ok, actor} <-
            ActivityPub.Actor.get_cached(pointer: subject),
          # TODO: add a followers-only preset?
-         context <- if(thread_id && thread_id != id, do: Threads.ap_prepare(thread_id)),
-         reply_to <-
-           if(reply_to_id == thread_id, do: context) ||
-             if(reply_to_id && reply_to_id != id, do: Threads.ap_prepare(reply_to_id)),
-         # TODO ^ support replies and context for all object types, not just posts
+         {context, reply_to} <- Threads.ap_prepare_context_and_reply_to(post),
          object <-
            PostContents.ap_prepare_object_note(
              subject,
@@ -836,23 +828,10 @@ defmodule Bonfire.Posts do
     post_data = e(ap_object, :data, %{})
     id = e(ap_object, :pointer_id, nil)
 
-    reply_to_ap_object = Threads.reply_to_ap_object(activity_data, post_data)
+    # `thread_under_id` is only for threading: whether this is a message still goes by `reply_to_id`, what we actually hold
+    {reply_to_ap_object, thread_under_id} = Threads.ap_receive_reply_to(activity_data, post_data)
 
-    reply_to_id =
-      e(reply_to_ap_object, :pointer_id, nil)
-
-    # replying to something we couldn't fetch: threaded under a placeholder for it, which it fills when it arrives. Only for threading: whether this is a message still goes by `reply_to_id`, what we actually hold
-    thread_under_id =
-      reply_to_id ||
-        with {:ok, placeholder_id} <-
-               Bonfire.Federate.ActivityPub.AdapterUtils.get_or_create_placeholder(
-                 Threads.reply_to_ap_id(activity_data, post_data),
-                 Bonfire.Federate.ActivityPub.AdapterUtils.thread_opener_id(post_data)
-               ) do
-          placeholder_id
-        else
-          _ -> nil
-        end
+    reply_to_id = e(reply_to_ap_object, :pointer_id, nil)
 
     is_public? =
       Bonfire.Federate.ActivityPub.AdapterUtils.is_public?(ap_activity, ap_object)

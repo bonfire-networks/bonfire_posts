@@ -91,6 +91,36 @@ defmodule Bonfire.Posts.InlineMediaTest do
     assert InlineMedia.inline_ids(stored_body(post), [inline]) == [id(inline)]
   end
 
+  # the composer writes `upload:<ref>` for a file not uploaded yet: at publish each becomes the stored media's URL
+  describe "swap_upload_refs/2" do
+    test "puts each stored media's URL in place of its upload ref", %{
+      inline: inline,
+      other: other
+    } do
+      body = "Intro\n\n![](upload:phx-1)\n\nmid ![](upload:phx-2) end"
+
+      swapped =
+        InlineMedia.swap_upload_refs(body, %{"phx-1" => inline, "phx-2" => other})
+
+      assert swapped ==
+               "Intro\n\n![](#{Bonfire.Files.inline_url(inline)})\n\nmid ![](#{Bonfire.Files.inline_url(other)}) end"
+    end
+
+    test "drops the image of a ref with no stored media (removed before publishing)", %{
+      inline: inline
+    } do
+      body = "Intro\n\n![](upload:phx-1)\n\n![](upload:phx-gone)\n\nmore"
+
+      assert InlineMedia.swap_upload_refs(body, %{"phx-1" => inline}) ==
+               "Intro\n\n![](#{Bonfire.Files.inline_url(inline)})\n\n\n\nmore"
+    end
+
+    test "leaves a body without refs as it is" do
+      assert InlineMedia.swap_upload_refs("no refs here", %{}) == "no refs here"
+      assert InlineMedia.swap_upload_refs(nil, %{}) == nil
+    end
+  end
+
   # Linkify turns a bare URL into `[display](href)` at ingest: the href must stay the URL as written, or it no longer matches its media
   describe "Linkify keeps a player's URL alone on its line as written" do
     for url <- [
