@@ -121,6 +121,52 @@ defmodule Bonfire.Posts.InlineMediaTest do
     end
   end
 
+  # a URL ending a line is stored in its own paragraph, so the post federates with it alone on its line, where another instance (which gets HTML) places its media
+  describe "a URL ending a line gets its own paragraph" do
+    @player "https://video.example.com/w/x"
+
+    # what another instance would cut, from the HTML it gets
+    defp placed_elsewhere?(body, url) do
+      {:url, url} in Bonfire.Common.Text.markdown_parts(
+        Bonfire.Common.Text.maybe_markdown_to_html(body, []),
+        MapSet.new([url]),
+        []
+      )
+    end
+
+    for {name, body} <- [
+          {"after its label", "Intro\n\nWatch: #{@player}\n\nmore"},
+          {"ending a paragraph", "Intro\n\nsee this #{@player}\n\nmore"},
+          {"on a line of a longer paragraph", "Intro\n#{@player}\nmore"}
+        ] do
+      test "when published, #{name}", %{me: me} do
+        post = publish!(me, unquote(body), [])
+
+        assert placed_elsewhere?(stored_body(post), @player), stored_body(post)
+      end
+    end
+
+    test "when edited", %{me: me} do
+      post = publish!(me, "Intro", [])
+
+      assert {:ok, _} = PostContents.edit(me, id(post), %{html_body: "Watch: #{@player}"})
+
+      # an edit isn't linkified (unlike publishing), so this checks the paragraph the URL is stored in
+      assert stored_body(post) =~ ~r/^Watch:\s*\n\n#{Regex.escape(@player)}$/
+    end
+
+    # the control: a URL already alone in its paragraph is placed elsewhere as stored, and one in a sentence stays where it is
+    test "a URL already alone is stored as written, one in a sentence stays in it", %{me: me} do
+      alone = publish!(me, "Intro\n\n#{@player}\n\nmore", [])
+      assert placed_elsewhere?(stored_body(alone), @player)
+
+      in_sentence = publish!(me, "see #{@player} there", [])
+      refute placed_elsewhere?(stored_body(in_sentence), @player)
+      assert stored_body(in_sentence) =~ "see "
+      refute stored_body(in_sentence) =~ "\n\n"
+    end
+  end
+
   # Linkify turns a bare URL into `[display](href)` at ingest: the href must stay the URL as written, or it no longer matches its media
   describe "Linkify keeps a player's URL alone on its line as written" do
     for url <- [
