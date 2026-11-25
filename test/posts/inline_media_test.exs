@@ -91,6 +91,64 @@ defmodule Bonfire.Posts.InlineMediaTest do
     assert InlineMedia.inline_ids(stored_body(post), [inline]) == [id(inline)]
   end
 
+  # one pass over an object's media and body: which media the body places (where it's cut, or an image it shows), the cut parts to render, and the rest for the attachment list
+  describe "split/3" do
+    defp placed_ids(%{inline_media: inline_media}),
+      do: inline_media |> Map.values() |> Enum.map(&id/1) |> Enum.uniq()
+
+    test "a markdown body: an image alone in its paragraph is placed and cut there, the rest is listed",
+         %{inline: inline, other: other} do
+      url = Bonfire.Files.inline_url(inline)
+      split = InlineMedia.split([inline, other], "Intro\n\n![](#{url})\n\nmore")
+
+      assert placed_ids(split) == [id(inline)]
+      assert Enum.map(split.unplaced, &id/1) == [id(other)]
+      assert {:url, url} in split.parts
+    end
+
+    test "a markdown body: an image in the middle of a sentence is placed, so it shows once",
+         %{inline: inline} do
+      split = InlineMedia.split([inline], "see ![](#{Bonfire.Files.inline_url(inline)}) here")
+
+      assert placed_ids(split) == [id(inline)]
+      assert split.unplaced == []
+    end
+
+    # it isn't cut, so it shows only as a link in the text: its card stays in the list
+    test "a markdown body: a link in the middle of a sentence isn't placed, so it keeps its card",
+         %{inline: inline} do
+      split = InlineMedia.split([inline], "see #{Bonfire.Files.inline_url(inline)} here")
+
+      assert placed_ids(split) == []
+      assert Enum.map(split.unplaced, &id/1) == [id(inline)]
+    end
+
+    test "an HTML body: a link alone in its paragraph is placed and cut there, one in a sentence isn't",
+         %{inline: inline, other: other} do
+      url = Bonfire.Files.inline_url(inline)
+      other_url = Bonfire.Files.inline_url(other)
+
+      split =
+        InlineMedia.split(
+          [inline, other],
+          ~s(<p>a</p><p><a href="#{url}">#{url}</a></p><p>see <a href="#{other_url}">it</a> here</p>)
+        )
+
+      assert placed_ids(split) == [id(inline)]
+      assert Enum.map(split.unplaced, &id/1) == [id(other)]
+      assert {:url, url} in split.parts
+    end
+
+    test "control: a body without any of the URLs places nothing and isn't cut",
+         %{inline: inline, other: other} do
+      split = InlineMedia.split([inline, other], "no media in the text")
+
+      assert split.inline_media == %{}
+      assert split.parts == nil
+      assert Enum.map(split.unplaced, &id/1) == [id(inline), id(other)]
+    end
+  end
+
   # the composer writes `upload:<ref>` for a file not uploaded yet: at publish each becomes the stored media's URL
   describe "swap_upload_refs/2" do
     test "puts each stored media's URL in place of its upload ref", %{
@@ -164,6 +222,69 @@ defmodule Bonfire.Posts.InlineMediaTest do
       refute placed_elsewhere?(stored_body(in_sentence), @player)
       assert stored_body(in_sentence) =~ "see "
       refute stored_body(in_sentence) =~ "\n\n"
+    end
+  end
+
+  # media named in a body by its URL (eg. an image dragged in from a post) is attached to the new post, if its author may see it, so it shows as media there rather than as a plain image (`InlineMedia.referenced_media/2`)
+  describe "media a body names by its URL" do
+    defp attached_ids(post) do
+      post
+      |> repo().maybe_preload([files: [:media]], force: true)
+      |> e(:files, [])
+      |> Enum.map(&e(&1, :media_id, nil))
+    end
+
+    defp publish_with_boundary!(user, body, media, boundary) do
+      {:ok, post} =
+        Posts.publish(
+          current_user: user,
+          post_attrs: %{post_content: %{html_body: body}, uploaded_media: media},
+          boundary: boundary
+        )
+
+      post
+    end
+
+    test "another user's image from a public post is attached", %{me: me} do
+      alice = Fake.fake_user!()
+      image = Bonfire.Social.Fake.upload_media(:images, alice, "theirs")
+      publish_with_boundary!(alice, "mine", [image], "public")
+
+      post = publish!(me, "look:\n\n![](#{Bonfire.Files.inline_url(image)})\n\nnice", [])
+
+      assert id(image) in attached_ids(post)
+    end
+
+    test "my own upload, never published, placed by its relative URL, is attached", %{
+      me: me,
+      inline: inline
+    } do
+      %URI{path: path} = URI.parse(Bonfire.Files.inline_url(inline))
+
+      post = publish!(me, "Intro\n\n![](#{path})\n\nmore", [])
+
+      assert id(inline) in attached_ids(post)
+    end
+
+    test "an existing remote media, placed by its URL, is attached", %{me: me} do
+      alice = Fake.fake_user!()
+      url = "https://images.example.com/a-picture.png"
+      remote = Bonfire.Files.Media.maybe_save(alice, url, %{media_type: "image/png"})
+      publish_with_boundary!(alice, "theirs", [remote], "public")
+
+      post = publish!(me, "Intro\n\n![](#{url})\n\nmore", [])
+
+      assert id(remote) in attached_ids(post)
+    end
+
+    test "control: an image attached only to a post I may not see isn't attached", %{me: me} do
+      alice = Fake.fake_user!()
+      image = Bonfire.Social.Fake.upload_media(:images, alice, "private")
+      publish_with_boundary!(alice, "only me", [image], "mentions")
+
+      post = publish!(me, "Intro\n\n![](#{Bonfire.Files.inline_url(image)})\n\nmore", [])
+
+      refute id(image) in attached_ids(post)
     end
   end
 
