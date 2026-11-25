@@ -183,7 +183,10 @@ defmodule Bonfire.Posts.API.MastoAdapter do
 
   defp publish_status(%{"poll" => %{} = poll}, opts) do
     if Extend.module_enabled?(Bonfire.Poll.API.GraphQLMasto.Adapter, opts) do
-      Bonfire.Poll.API.GraphQLMasto.Adapter.create_poll(poll, boundary_list_as_to_boundaries(opts))
+      Bonfire.Poll.API.GraphQLMasto.Adapter.create_poll(
+        poll,
+        boundary_list_as_to_boundaries(opts)
+      )
     else
       {:error, {:unprocessable_entity, "Polls are not available"}}
     end
