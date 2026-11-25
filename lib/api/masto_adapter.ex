@@ -16,6 +16,10 @@ defmodule Bonfire.Posts.API.MastoAdapter do
     else
       try do
         case publish_from_masto_params(params, current_user) do
+          # Mastodon answers a ScheduledStatus, not a Status, for a post to be published later (B49 decision 1)
+          {:scheduled, post, scheduled} ->
+            RestAdapter.json(conn, scheduled_status(post, scheduled, params))
+
           {:ok, post} ->
             # read back through GraphQL, as show does
             case read_back(id(post), current_user) do
@@ -74,23 +78,129 @@ defmodule Bonfire.Posts.API.MastoAdapter do
     end
   end
 
+  # everything that can refuse the request is checked before anything is published
   defp publish_from_masto_params(params, current_user) do
-    with {:ok, post_attrs} <- build_post_attrs(params, current_user),
-         opts <- build_publish_opts(params, current_user, post_attrs),
+    with {:ok, scheduled_at} <- validate_scheduled_at(params),
+         {:ok, visibility} <- validate_visibility(params["visibility"]),
+         {:ok, post_attrs} <- build_post_attrs(params, current_user),
+         post_attrs = maybe_put_scheduled_at(post_attrs, scheduled_at),
+         {:ok, opts} <- build_publish_opts(params, visibility, current_user, post_attrs),
          {:ok, post} <- publish_status(params, opts) do
-      {:ok, post}
+      if scheduled_at do
+        {:scheduled, post,
+         %{
+           scheduled_at: scheduled_at,
+           visibility:
+             visibility || Bonfire.API.MastoCompat.Helpers.default_visibility(current_user),
+           media_ids: Enum.map(post_attrs[:uploaded_media] || [], &id/1)
+         }}
+      else
+        {:ok, post}
+      end
     end
+  end
+
+  # Mastodon refuses a schedule less than 5 minutes ahead (B49 decision 2)
+  @min_schedule_seconds 5 * 60
+
+  defp validate_scheduled_at(%{"scheduled_at" => at} = params) when is_binary(at) and at != "" do
+    case parse_scheduled_at(at) do
+      {:ok, dt} ->
+        cond do
+          DateTime.diff(dt, DateTime.utc_now(), :second) < @min_schedule_seconds ->
+            {:error,
+             {:unprocessable_entity, "Scheduled at must be at least 5 minutes in the future"}}
+
+          # polls are created by their own extension, which does not schedule; publishing one at once would ignore the request
+          is_map(params["poll"]) ->
+            {:error, {:unprocessable_entity, "Scheduling a poll is not supported"}}
+
+          true ->
+            {:ok, DateTime.truncate(dt, :second)}
+        end
+
+      _ ->
+        {:error, {:unprocessable_entity, "Scheduled at is not a valid date"}}
+    end
+  end
+
+  defp validate_scheduled_at(%{"scheduled_at" => at}) when at not in [nil, ""],
+    do: {:error, {:unprocessable_entity, "Scheduled at is not a valid date"}}
+
+  defp validate_scheduled_at(_params), do: {:ok, nil}
+
+  # a value without an offset is read as UTC, as `Posts.publish` reads it (`scheduled_date_time/1` in `posts.publish.ex`)
+  defp parse_scheduled_at(at) do
+    case DateTime.from_iso8601(at) do
+      {:ok, dt, _offset} ->
+        {:ok, dt}
+
+      _ ->
+        case NaiveDateTime.from_iso8601(at) do
+          {:ok, naive} -> {:ok, DateTime.from_naive!(naive, "Etc/UTC")}
+          _ -> :error
+        end
+    end
+  end
+
+  defp maybe_put_scheduled_at(post_attrs, nil), do: post_attrs
+
+  defp maybe_put_scheduled_at(post_attrs, %DateTime{} = scheduled_at),
+    do: Map.put(post_attrs, :scheduled_at, scheduled_at)
+
+  @visibilities ["public", "unlisted", "private", "direct"]
+
+  # an unknown visibility is refused rather than guessed (B49 decision 4); omitted means the user's default
+  defp validate_visibility(nil), do: {:ok, nil}
+  defp validate_visibility(""), do: {:ok, nil}
+  defp validate_visibility(visibility) when visibility in @visibilities, do: {:ok, visibility}
+
+  defp validate_visibility(_),
+    do: {:error, {:unprocessable_entity, "Visibility is not included in the list"}}
+
+  # the Mastodon ScheduledStatus entity: the post's id (a ULID dated at the schedule) and the params it was posted with
+  defp scheduled_status(post, scheduled, params) do
+    %{
+      "id" => id(post),
+      "scheduled_at" => DateTime.to_iso8601(scheduled.scheduled_at),
+      "params" => %{
+        "text" => params["status"],
+        "visibility" => scheduled.visibility,
+        "spoiler_text" => params["spoiler_text"],
+        "sensitive" => params["sensitive"] in [true, "true", "1"],
+        "in_reply_to_id" => params["in_reply_to_id"],
+        "media_ids" => scheduled.media_ids,
+        "poll" => nil,
+        "language" => params["language"],
+        "scheduled_at" => nil,
+        "idempotency" => nil,
+        "application_id" => nil,
+        "with_rate_limit" => false
+      },
+      "media_attachments" => []
+    }
   end
 
   defp publish_status(%{"poll" => %{} = poll}, opts) do
     if Extend.module_enabled?(Bonfire.Poll.API.GraphQLMasto.Adapter, opts) do
-      Bonfire.Poll.API.GraphQLMasto.Adapter.create_poll(poll, opts)
+      Bonfire.Poll.API.GraphQLMasto.Adapter.create_poll(poll, boundary_list_as_to_boundaries(opts))
     else
       {:error, {:unprocessable_entity, "Polls are not available"}}
     end
   end
 
   defp publish_status(_params, opts), do: Bonfire.Posts.publish(opts)
+
+  # the `createPoll` mutation takes `boundary` as one string, and a list as `toBoundaries`
+  defp boundary_list_as_to_boundaries(opts) do
+    case opts[:boundary] do
+      boundaries when is_list(boundaries) ->
+        opts |> Keyword.delete(:boundary) |> Keyword.put(:to_boundaries, boundaries)
+
+      _ ->
+        opts
+    end
+  end
 
   defp build_post_attrs(params, current_user) do
     status_text = params["status"] || ""
@@ -156,51 +266,65 @@ defmodule Bonfire.Posts.API.MastoAdapter do
 
   defp fetch_owned_media(_media_id, _current_user), do: {:error, :not_found}
 
-  defp build_publish_opts(params, current_user, post_attrs) do
+  defp build_publish_opts(params, visibility, current_user, post_attrs) do
     context_id = params["context_id"]
-    explicit_visibility = params["visibility"]
 
     base_opts =
       [current_user: current_user, post_attrs: post_attrs]
       |> maybe_add_sensitive(params["sensitive"])
       |> maybe_add_context_id(context_id)
 
-    if context_id && is_nil(explicit_visibility) do
-      apply_context_boundary(base_opts, context_id)
-    else
-      {boundary, extra_circles} = visibility_to_boundary(explicit_visibility, current_user)
-      extra_circles = if context_id, do: [context_id | extra_circles], else: extra_circles
+    cond do
+      context_id && is_nil(visibility) ->
+        apply_context_boundary(base_opts, context_id)
 
-      base_opts
-      |> Keyword.put(:boundary, boundary)
-      |> Keyword.put(:to_circles, extra_circles)
+      # a group that cannot be loaded is refused whatever the visibility (B49 decision 6)
+      context_id ->
+        with {:ok, _context} <- load_context(context_id, base_opts) do
+          explicit_boundary_opts(base_opts, visibility, context_id, current_user)
+        end
+
+      # omitted: the user's default preset, as the web composer opens with (B49 decision 3), passed as a list in `boundary` as the composer does (`PostsLiveHandler`)
+      is_nil(visibility) ->
+        {:ok, Keyword.put(base_opts, :boundary, default_boundary_ids(current_user))}
+
+      true ->
+        explicit_boundary_opts(base_opts, visibility, context_id, current_user)
     end
   end
 
+  defp explicit_boundary_opts(base_opts, visibility, context_id, current_user) do
+    {boundary, extra_circles} = visibility_to_boundary(visibility, current_user)
+    extra_circles = if context_id, do: [context_id | extra_circles], else: extra_circles
+
+    {:ok,
+     base_opts
+     |> Keyword.put(:boundary, boundary)
+     |> Keyword.put(:to_circles, extra_circles)}
+  end
+
+  # a group that cannot be loaded is refused, never posted with some other audience (B49 decision 6)
   defp apply_context_boundary(opts, context_id) do
-    if Extend.module_enabled?(Bonfire.Classify.Boundaries, opts) and
-         Extend.module_enabled?(Bonfire.Classify.Categories, opts) do
-      case Bonfire.Classify.Categories.get(context_id, opts) do
-        {:ok, context} ->
-          dcv = Bonfire.Classify.Boundaries.read_default_content_visibility(context)
+    with {:ok, context} <- load_context(context_id, opts) do
+      dcv = Bonfire.Classify.Boundaries.read_default_content_visibility(context)
 
-          # no `to_circles`: that gave each post an ACL of its own; the group's shared ACLs are attached by `SetBoundaries` wherever the post comes from
-          # circles = Bonfire.Classify.Boundaries.post_circles_for_group(context)
-          boundaries = dcv |> List.wrap() |> Enum.reject(&is_nil/1)
-          boundaries = if boundaries == [], do: ["public"], else: boundaries
+      # no `to_circles`: that gave each post an ACL of its own; the group's shared ACLs are attached by `SetBoundaries` wherever the post comes from
+      # circles = Bonfire.Classify.Boundaries.post_circles_for_group(context)
+      boundaries = dcv |> List.wrap() |> Enum.reject(&is_nil/1)
+      boundaries = if boundaries == [], do: ["public"], else: boundaries
 
-          opts
-          |> Keyword.put(:to_boundaries, boundaries)
+      {:ok, Keyword.put(opts, :to_boundaries, boundaries)}
+    end
+  end
 
-        # |> Keyword.put(:to_circles, circles)
-
-        _ ->
-          {boundary, _} = visibility_to_boundary(nil, opts[:current_user])
-          Keyword.put(opts, :boundary, boundary)
-      end
+  defp load_context(context_id, opts) do
+    with true <-
+           Extend.module_enabled?(Bonfire.Classify.Boundaries, opts) and
+             Extend.module_enabled?(Bonfire.Classify.Categories, opts),
+         {:ok, context} <- Bonfire.Classify.Categories.get(context_id, opts) do
+      {:ok, context}
     else
-      {boundary, _} = visibility_to_boundary(nil, opts[:current_user])
-      Keyword.put(opts, :boundary, boundary)
+      _ -> {:error, {:unprocessable_entity, "Group not found"}}
     end
   end
 
@@ -216,7 +340,16 @@ defmodule Bonfire.Posts.API.MastoAdapter do
   end
 
   defp visibility_to_boundary("direct", _current_user), do: {"mentions", []}
-  defp visibility_to_boundary(_, _current_user), do: {"public", []}
+
+  # the preset slugs or, for a custom preset, the ACL id
+  defp default_boundary_ids(current_user) do
+    Bonfire.Boundaries.Presets.default_boundaries(current_user: current_user)
+    |> List.wrap()
+    |> Enum.map(fn
+      {id, _name} -> to_string(id)
+      id -> to_string(id)
+    end)
+  end
 
   defp maybe_add_sensitive(opts, sensitive) when sensitive in [true, "true", "1"] do
     Keyword.put(opts, :sensitive, true)
