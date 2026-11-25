@@ -225,6 +225,69 @@ defmodule Bonfire.Posts.InlineMediaTest do
     end
   end
 
+  # media named in a body by its URL (eg. an image dragged in from a post) is attached to the new post, if its author may see it, so it shows as media there rather than as a plain image (`InlineMedia.referenced_media/2`)
+  describe "media a body names by its URL" do
+    defp attached_ids(post) do
+      post
+      |> repo().maybe_preload([files: [:media]], force: true)
+      |> e(:files, [])
+      |> Enum.map(&e(&1, :media_id, nil))
+    end
+
+    defp publish_with_boundary!(user, body, media, boundary) do
+      {:ok, post} =
+        Posts.publish(
+          current_user: user,
+          post_attrs: %{post_content: %{html_body: body}, uploaded_media: media},
+          boundary: boundary
+        )
+
+      post
+    end
+
+    test "another user's image from a public post is attached", %{me: me} do
+      alice = Fake.fake_user!()
+      image = Bonfire.Social.Fake.upload_media(:images, alice, "theirs")
+      publish_with_boundary!(alice, "mine", [image], "public")
+
+      post = publish!(me, "look:\n\n![](#{Bonfire.Files.inline_url(image)})\n\nnice", [])
+
+      assert id(image) in attached_ids(post)
+    end
+
+    test "my own upload, never published, placed by its relative URL, is attached", %{
+      me: me,
+      inline: inline
+    } do
+      %URI{path: path} = URI.parse(Bonfire.Files.inline_url(inline))
+
+      post = publish!(me, "Intro\n\n![](#{path})\n\nmore", [])
+
+      assert id(inline) in attached_ids(post)
+    end
+
+    test "an existing remote media, placed by its URL, is attached", %{me: me} do
+      alice = Fake.fake_user!()
+      url = "https://images.example.com/a-picture.png"
+      remote = Bonfire.Files.Media.maybe_save(alice, url, %{media_type: "image/png"})
+      publish_with_boundary!(alice, "theirs", [remote], "public")
+
+      post = publish!(me, "Intro\n\n![](#{url})\n\nmore", [])
+
+      assert id(remote) in attached_ids(post)
+    end
+
+    test "control: an image attached only to a post I may not see isn't attached", %{me: me} do
+      alice = Fake.fake_user!()
+      image = Bonfire.Social.Fake.upload_media(:images, alice, "private")
+      publish_with_boundary!(alice, "only me", [image], "mentions")
+
+      post = publish!(me, "Intro\n\n![](#{Bonfire.Files.inline_url(image)})\n\nmore", [])
+
+      refute id(image) in attached_ids(post)
+    end
+  end
+
   # Linkify turns a bare URL into `[display](href)` at ingest: the href must stay the URL as written, or it no longer matches its media
   describe "Linkify keeps a player's URL alone on its line as written" do
     for url <- [
